@@ -1,0 +1,104 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  STUDENT
+  ADMIN
+  UNIVERSITY
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String?
+  firstName    String
+  lastName     String
+  role         Role     @default(STUDENT)
+  googleId     String?  @unique
+  universityId String?
+  university   University? @relation(fields: [universityId], references: [id])
+  quizResults  QuizResult[]
+  chatMessages ChatMessage[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model University {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  domain    String   @unique
+  verified  Boolean  @default(false)
+  users     User[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Quiz {
+  id             String   @id @default(uuid())
+  title          String
+  description    String?  @db.Text
+  category       String
+  totalQuestions Int
+  maxScore       Int
+  quizResults    QuizResult[]
+  questions      Question[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Question {
+  id        String   @id @default(uuid())
+  quizId    String
+  quiz      Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  index     Int
+  text      String   @db.Text
+  type      String   @default("MULTIPLE_CHOICE")
+  options   QuestionOption[]
+  createdAt DateTime @default(now())
+}
+
+model QuestionOption {
+  id         String   @id @default(uuid())
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  label      String
+  points     Int
+}
+
+model QuizResult {
+  id             String   @id @default(uuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quizId         String
+  quiz           Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  overallScore   Int
+  classification String
+  completedAt    DateTime @default(now())
+}
+
+enum Sender {
+  USER
+  AI
+}
+
+model ChatMessage {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sender    Sender
+  message   String   @db.Text
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
