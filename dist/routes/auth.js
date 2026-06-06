@@ -85,6 +85,31 @@ router.post('/google/callback', async (req, res) => {
         },
     });
 });
+const otpStore = new Map();
+/**
+ * POST /api/auth/send-otp
+ *
+ * Generates and sends a 6-digit verification code to the user's email.
+ */
+router.post('/send-otp', async (req, res) => {
+    const { email } = req.body;
+    if (!email) {
+        res.status(400).json({ error: 'Email is required' });
+        return;
+    }
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes expiration
+    otpStore.set(email.toLowerCase(), { code, expiresAt });
+    console.log(`
+==================================================
+📧  WELLMINDLY EMAIL VERIFICATION
+To: ${email}
+Code: ${code}
+Expires in: 5 minutes
+==================================================
+  `);
+    res.status(200).json({ message: 'Verification code sent to your email.' });
+});
 /**
  * POST /api/auth/login
  *
@@ -135,5 +160,87 @@ router.post('/login', async (req, res) => {
             universityVerified: user.university?.verified ?? false,
         },
     });
+});
+/**
+ * POST /api/auth/register
+ *
+ * Traditional email/password registration for Students.
+ */
+router.post('/register', async (req, res) => {
+    const { email, password, firstName, lastName, otp } = req.body;
+    if (!email || !password || !firstName || !lastName || !otp) {
+        res.status(400).json({ error: 'All fields are required' });
+        return;
+    }
+    const domain = email.split('@')[1];
+    if (!domain) {
+        res.status(400).json({ error: 'Invalid email address' });
+        return;
+    }
+    // Validate OTP
+    const storedOtp = otpStore.get(email.toLowerCase());
+    if (!storedOtp) {
+        res.status(400).json({ error: 'Please request a verification code first' });
+        return;
+    }
+    if (Date.now() > storedOtp.expiresAt) {
+        otpStore.delete(email.toLowerCase());
+        res.status(400).json({ error: 'Verification code has expired' });
+        return;
+    }
+    if (storedOtp.code !== otp.trim()) {
+        res.status(400).json({ error: 'Incorrect verification code' });
+        return;
+    }
+    try {
+        const existingUser = await prisma_1.default.user.findUnique({
+            where: { email },
+        });
+        if (existingUser) {
+            res.status(400).json({ error: 'Email already registered' });
+            return;
+        }
+        const university = await prisma_1.default.university.findUnique({
+            where: { domain },
+        });
+        const bcrypt = require('bcrypt');
+        const saltRounds = 10;
+        const passwordHash = await bcrypt.hash(password, saltRounds);
+        const user = await prisma_1.default.user.create({
+            data: {
+                email,
+                passwordHash,
+                firstName,
+                lastName,
+                role: 'STUDENT',
+                universityId: university?.id ?? null,
+            },
+        });
+        // Clear OTP on successful signup
+        otpStore.delete(email.toLowerCase());
+        const token = (0, jwt_1.signToken)({
+            sub: user.id,
+            email: user.email,
+            role: user.role,
+            universityId: user.universityId,
+        });
+        res.status(201).json({
+            token,
+            user: {
+                id: user.id,
+                email: user.email,
+                firstName: user.firstName,
+                lastName: user.lastName,
+                role: user.role,
+                universityId: user.universityId,
+                universityDomain: university?.domain ?? null,
+                universityVerified: university?.verified ?? false,
+            },
+        });
+    }
+    catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Registration failed. Please try again.' });
+    }
 });
 exports.default = router;

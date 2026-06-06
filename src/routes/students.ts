@@ -1,8 +1,113 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { authenticateJWT, authorizeRoles } from '../utils/jwt';
+import fs from 'fs';
+import path from 'path';
+
+const CHECKINS_FILE = path.join(process.cwd(), 'daily-checkins.json');
+
+function readCheckins(): Record<string, { rating: number; date: string }> {
+  try {
+    if (!fs.existsSync(CHECKINS_FILE)) {
+      return {};
+    }
+    const content = fs.readFileSync(CHECKINS_FILE, 'utf-8');
+    return JSON.parse(content) as Record<string, { rating: number; date: string }>;
+  } catch (err) {
+    console.error('Error reading checkins file:', err);
+    return {};
+  }
+}
+
+function writeCheckins(data: Record<string, { rating: number; date: string }>) {
+  try {
+    fs.writeFileSync(CHECKINS_FILE, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Error writing checkins file:', err);
+  }
+}
+
+function getDailyCheckin(email: string): number | null {
+  const data = readCheckins();
+  const entry = data[email.toLowerCase()];
+  if (!entry) return null;
+
+  const today = new Date().toDateString();
+  const entryDate = new Date(entry.date).toDateString();
+  if (today === entryDate) {
+    return entry.rating;
+  }
+  return null;
+}
+
+function saveDailyCheckin(email: string, rating: number) {
+  const data = readCheckins();
+  data[email.toLowerCase()] = {
+    rating,
+    date: new Date().toISOString(),
+  };
+  writeCheckins(data);
+}
 
 const router = Router();
+
+/**
+ * GET /api/students/me/daily-checkin
+ *
+ * Fetches the current daily check-in (mood rating) for the logged-in student.
+ */
+router.get(
+  '/me/daily-checkin',
+  authenticateJWT,
+  authorizeRoles('STUDENT', 'ADMIN'),
+  async (req: Request, res: Response) => {
+    try {
+      const email = req.user?.email;
+      if (!email) {
+        res.status(401).json({ error: 'Email missing from token' });
+        return;
+      }
+      
+      const checkin = getDailyCheckin(email);
+      res.status(200).json({ checkin });
+    } catch (error) {
+      console.error('Error fetching daily check-in:', error);
+      res.status(500).json({ error: 'Failed to fetch daily check-in' });
+    }
+  }
+);
+
+/**
+ * POST /api/students/me/daily-checkin
+ *
+ * Saves/updates the current daily check-in (mood rating) for the logged-in student.
+ */
+router.post(
+  '/me/daily-checkin',
+  authenticateJWT,
+  authorizeRoles('STUDENT', 'ADMIN'),
+  async (req: Request, res: Response) => {
+    try {
+      const email = req.user?.email;
+      if (!email) {
+        res.status(401).json({ error: 'Email missing from token' });
+        return;
+      }
+
+      const { rating } = req.body as { rating?: number };
+      if (rating === undefined || rating < 1 || rating > 5) {
+        res.status(400).json({ error: 'Rating must be an integer between 1 and 5' });
+        return;
+      }
+
+      saveDailyCheckin(email, rating);
+      res.status(200).json({ message: 'Daily check-in saved', rating });
+    } catch (error) {
+      console.error('Error saving daily check-in:', error);
+      res.status(500).json({ error: 'Failed to save daily check-in' });
+    }
+  }
+);
 
 /**
  * GET /api/students/me/results

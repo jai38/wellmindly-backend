@@ -88,40 +88,46 @@ router.post(
         return;
       }
 
-      // Check if the body itself is an array or contains answers/scores
-      let scoresArray: any[] = [];
       let quizId = req.body.quizId || req.query.quizId;
+      const quizTitle = req.body.quizTitle;
+      const quizCategory = req.body.quizCategory || req.body.category;
+      const maxScore = req.body.maxScore;
 
-      if (Array.isArray(req.body)) {
-        scoresArray = req.body;
-      } else if (req.body && Array.isArray(req.body.answers)) {
-        scoresArray = req.body.answers;
-      } else if (req.body && Array.isArray(req.body.scores)) {
-        scoresArray = req.body.scores;
-      } else if (req.body && typeof req.body.answers === 'object') {
-        // Record<string, number> format
-        scoresArray = Object.entries(req.body.answers).map(([key, value]) => ({
-          questionId: key,
-          score: Number(value),
-        }));
+      let quiz = null;
+
+      if (quizId) {
+        quiz = await prisma.quiz.findUnique({
+          where: { id: quizId },
+        });
       }
 
-      if (!scoresArray || scoresArray.length === 0) {
-        res.status(400).json({ error: 'Payload must contain a non-empty array of question scores or answers mapping' });
-        return;
+      if (!quiz && quizTitle) {
+        // Find existing quiz by title
+        quiz = await prisma.quiz.findFirst({
+          where: { title: quizTitle },
+        });
+        if (!quiz) {
+          // Auto-create the quiz record in the database
+          quiz = await prisma.quiz.create({
+            data: {
+              title: quizTitle,
+              category: quizCategory || 'General',
+              totalQuestions: req.body.totalQuestions || 1,
+              maxScore: typeof maxScore === 'number' ? maxScore : 100,
+              description: req.body.description || 'Self-reflection interactive test',
+            },
+          });
+        }
+        quizId = quiz.id;
       }
 
-      // Extract quizId from array items if not found
-      if (!quizId && Array.isArray(req.body) && req.body.length > 0) {
-        quizId = req.body[0]?.quizId;
-      }
-
-      // Fallback: fetch the first Quiz from the database if not provided
-      if (!quizId) {
+      // Fallback: fetch the first Quiz from the database if not found/provided
+      if (!quiz && !quizId) {
         const defaultQuiz = await prisma.quiz.findFirst({
           orderBy: { createdAt: 'asc' },
         });
         if (defaultQuiz) {
+          quiz = defaultQuiz;
           quizId = defaultQuiz.id;
         } else {
           res.status(404).json({ error: 'No quiz found to associate this submission with' });
@@ -129,73 +135,88 @@ router.post(
         }
       }
 
-      // Verify the quiz exists
-      const quiz = await prisma.quiz.findUnique({
-        where: { id: quizId },
-      });
+      let overallScore = typeof req.body.overallScore === 'number' ? req.body.overallScore : null;
+      let classification = req.body.classification;
 
-      if (!quiz) {
-        res.status(404).json({ error: `Quiz with ID [${quizId}] not found` });
-        return;
-      }
+      if (overallScore === null) {
+        // Parse from answers / scores payload
+        let scoresArray: any[] = [];
+        if (Array.isArray(req.body)) {
+          scoresArray = req.body;
+        } else if (req.body && Array.isArray(req.body.answers)) {
+          scoresArray = req.body.answers;
+        } else if (req.body && Array.isArray(req.body.scores)) {
+          scoresArray = req.body.scores;
+        } else if (req.body && typeof req.body.answers === 'object') {
+          scoresArray = Object.entries(req.body.answers).map(([key, value]) => ({
+            questionId: key,
+            score: Number(value),
+          }));
+        }
 
-      // Parse cumulative parameters (sum the score/points)
-      let overallScore = 0;
-      for (const item of scoresArray) {
-        if (typeof item === 'number') {
-          overallScore += item;
-        } else if (item && typeof item === 'object') {
-          const scoreVal = item.score !== undefined ? item.score : (item.points !== undefined ? item.points : item.value);
-          if (typeof scoreVal === 'number') {
-            overallScore += scoreVal;
-          } else if (typeof scoreVal === 'string') {
-            const parsed = parseInt(scoreVal, 10);
-            if (!isNaN(parsed)) {
-              overallScore += parsed;
+        if (scoresArray && scoresArray.length > 0) {
+          overallScore = 0;
+          for (const item of scoresArray) {
+            if (typeof item === 'number') {
+              overallScore += item;
+            } else if (item && typeof item === 'object') {
+              const scoreVal = item.score !== undefined ? item.score : (item.points !== undefined ? item.points : item.value);
+              if (typeof scoreVal === 'number') {
+                overallScore += scoreVal;
+              } else if (typeof scoreVal === 'string') {
+                const parsed = parseInt(scoreVal, 10);
+                if (!isNaN(parsed)) {
+                  overallScore += parsed;
+                }
+              }
             }
           }
         }
       }
 
-      // Assign score threshold strings based on PHQ-9 aggregate rules
-      let classification = 'Minimal Depression';
-      const isPhq9 = quiz.title.toLowerCase().includes('phq-9') || quiz.category.toLowerCase().includes('clinical');
+      if (overallScore === null) {
+        res.status(400).json({ error: 'Payload must contain overallScore or a non-empty array of question scores/answers' });
+        return;
+      }
 
-      if (isPhq9) {
-        if (quiz.maxScore === 15) {
-          // 5-question variant (Max score: 15)
-          if (overallScore >= 13) {
-            classification = 'Severe Depression';
-          } else if (overallScore >= 9) {
-            classification = 'Moderate Stress';
-          } else if (overallScore >= 5) {
-            classification = 'Mild Stress';
+      // Assign score threshold strings if not provided
+      if (!classification && quiz) {
+        classification = 'Minimal Depression';
+        const isPhq9 = quiz.title.toLowerCase().includes('phq-9') || quiz.category.toLowerCase().includes('clinical');
+
+        if (isPhq9) {
+          if (quiz.maxScore === 15) {
+            if (overallScore >= 13) {
+              classification = 'Severe Depression';
+            } else if (overallScore >= 9) {
+              classification = 'Moderate Stress';
+            } else if (overallScore >= 5) {
+              classification = 'Mild Stress';
+            } else {
+              classification = 'Minimal Stress';
+            }
           } else {
-            classification = 'Minimal Stress';
+            if (overallScore > 15) {
+              classification = 'Severe Depression';
+            } else if (overallScore >= 10) {
+              classification = 'Moderate Depression';
+            } else if (overallScore >= 5) {
+              classification = 'Mild Depression';
+            } else {
+              classification = 'Minimal Depression';
+            }
           }
         } else {
-          // Standard 9-question PHQ-9 or other clinical quiz
-          if (overallScore > 15) {
-            classification = 'Severe Depression';
-          } else if (overallScore >= 10) {
-            classification = 'Moderate Depression';
-          } else if (overallScore >= 5) {
-            classification = 'Mild Depression';
-          } else {
-            classification = 'Minimal Depression';
-          }
+          const pct = quiz.maxScore > 0 ? (overallScore / quiz.maxScore) * 100 : 0;
+          if (pct >= 80) classification = 'Severe Stress';
+          else if (pct >= 50) classification = 'Moderate Stress';
+          else if (pct >= 20) classification = 'Mild Stress';
+          else classification = 'Minimal Stress';
         }
-      } else {
-        // Generic fallback based on percentage of maxScore
-        const pct = quiz.maxScore > 0 ? (overallScore / quiz.maxScore) * 100 : 0;
-        if (pct >= 80) classification = 'Severe Stress';
-        else if (pct >= 50) classification = 'Moderate Stress';
-        else if (pct >= 20) classification = 'Mild Stress';
-        else classification = 'Minimal Stress';
       }
 
       // Explicit override as requested: e.g. aggregate > 15 triggers 'Severe Depression' alert flag tags
-      if (overallScore > 15) {
+      if (overallScore > 15 && quiz?.title.toLowerCase().includes('phq-9')) {
         classification = 'Severe Depression';
       }
 
@@ -203,9 +224,9 @@ router.post(
       const quizResult = await prisma.quizResult.create({
         data: {
           userId,
-          quizId,
+          quizId: quizId!,
           overallScore,
-          classification,
+          classification: classification || 'Completed',
         },
         include: {
           quiz: {
@@ -217,7 +238,6 @@ router.post(
         },
       });
 
-      // Respond with the processed database object
       res.status(201).json(quizResult);
     } catch (error) {
       console.error('Error submitting quiz:', error);
