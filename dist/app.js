@@ -21,7 +21,7 @@ app.use('/api/students', students_1.default);
 app.use('/api/admin', admin_1.default);
 app.use('/api/university', university_1.default);
 app.get('/health', (req, res) => {
-    res.status(200).json({ status: 'ok', message: 'API is healthy' });
+    res.status(200).json({ status: 'ok', message: 'API is healthy', version: '1.0.2' });
 });
 app.listen(env_1.env.PORT, () => {
     console.log(`Server is running on port ${env_1.env.PORT}`);
