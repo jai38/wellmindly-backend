@@ -20,7 +20,7 @@ app.use('/api/admin', adminRouter);
 app.use('/api/university', universityRouter);
 
 app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'ok', message: 'API is healthy', version: '1.0.2' });
+  res.status(200).json({ status: 'ok', message: 'API is healthy', version: '1.0.3' });
 });
 
 app.listen(env.PORT, () => {
