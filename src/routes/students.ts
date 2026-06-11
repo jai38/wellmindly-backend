@@ -1,54 +1,6 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { authenticateJWT, authorizeRoles } from '../utils/jwt';
-import fs from 'fs';
-import path from 'path';
-
-const CHECKINS_FILE = path.join(process.cwd(), 'daily-checkins.json');
-
-function readCheckins(): Record<string, { rating: number; date: string }> {
-  try {
-    if (!fs.existsSync(CHECKINS_FILE)) {
-      return {};
-    }
-    const content = fs.readFileSync(CHECKINS_FILE, 'utf-8');
-    return JSON.parse(content) as Record<string, { rating: number; date: string }>;
-  } catch (err) {
-    console.error('Error reading checkins file:', err);
-    return {};
-  }
-}
-
-function writeCheckins(data: Record<string, { rating: number; date: string }>) {
-  try {
-    fs.writeFileSync(CHECKINS_FILE, JSON.stringify(data, null, 2), 'utf-8');
-  } catch (err) {
-    console.error('Error writing checkins file:', err);
-  }
-}
-
-function getDailyCheckin(email: string): number | null {
-  const data = readCheckins();
-  const entry = data[email.toLowerCase()];
-  if (!entry) return null;
-
-  const today = new Date().toDateString();
-  const entryDate = new Date(entry.date).toDateString();
-  if (today === entryDate) {
-    return entry.rating;
-  }
-  return null;
-}
-
-function saveDailyCheckin(email: string, rating: number) {
-  const data = readCheckins();
-  data[email.toLowerCase()] = {
-    rating,
-    date: new Date().toISOString(),
-  };
-  writeCheckins(data);
-}
-
 const router = Router();
 
 /**
@@ -68,8 +20,27 @@ router.get(
         return;
       }
       
-      const checkin = getDailyCheckin(email);
-      res.status(200).json({ checkin });
+      const user = await prisma.user.findUnique({
+        where: { email },
+        include: {
+          dailyCheckins: {
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+          },
+        },
+      });
+
+      let rating = null;
+      if (user && user.dailyCheckins.length > 0) {
+        const latestCheckin = user.dailyCheckins[0];
+        const today = new Date().toDateString();
+        const checkinDate = new Date(latestCheckin.createdAt).toDateString();
+        if (today === checkinDate) {
+          rating = latestCheckin.rating;
+        }
+      }
+
+      res.status(200).json({ checkin: rating });
     } catch (error) {
       console.error('Error fetching daily check-in:', error);
       res.status(500).json({ error: 'Failed to fetch daily check-in' });
@@ -100,7 +71,41 @@ router.post(
         return;
       }
 
-      saveDailyCheckin(email, rating);
+      const user = await prisma.user.findUnique({
+        where: { email },
+      });
+
+      if (!user) {
+        res.status(404).json({ error: 'User not found' });
+        return;
+      }
+
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+
+      const existingCheckin = await prisma.dailyCheckin.findFirst({
+        where: {
+          userId: user.id,
+          createdAt: {
+            gte: todayStart,
+          },
+        },
+      });
+
+      if (existingCheckin) {
+        await prisma.dailyCheckin.update({
+          where: { id: existingCheckin.id },
+          data: { rating },
+        });
+      } else {
+        await prisma.dailyCheckin.create({
+          data: {
+            userId: user.id,
+            rating,
+          },
+        });
+      }
+
       res.status(200).json({ message: 'Daily check-in saved', rating });
     } catch (error) {
       console.error('Error saving daily check-in:', error);

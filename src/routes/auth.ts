@@ -282,4 +282,50 @@ router.post('/register', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * POST /api/auth/waitlist
+ *
+ * Adds an email and feature to the waitlist.
+ * Body: { email: string, feature: string }
+ */
+router.post('/waitlist', async (req: Request, res: Response) => {
+  const { email, feature } = req.body as { email?: string; feature?: string };
+
+  if (!email || !feature) {
+    res.status(400).json({ error: 'Email and feature are required' });
+    return;
+  }
+
+  const emailLower = email.toLowerCase().trim();
+  if (!emailLower.includes('@')) {
+    res.status(400).json({ error: 'Invalid email address' });
+    return;
+  }
+
+  try {
+    const waitlistEntry = await prisma.waitlist.upsert({
+      where: {
+        email_feature: {
+          email: emailLower,
+          feature,
+        },
+      },
+      update: {}, // No-op if it already exists
+      create: {
+        email: emailLower,
+        feature,
+      },
+    });
+
+    res.status(200).json({
+      message: 'Successfully joined the waitlist.',
+      waitlist: waitlistEntry,
+    });
+  } catch (err: any) {
+    console.error('Waitlist error:', err);
+    res.status(500).json({ error: 'Failed to join waitlist. Please try again.' });
+  }
+});
+
 export default router;
+

@@ -30,6 +30,7 @@ model User {
   university   University? @relation(fields: [universityId], references: [id])
   quizResults  QuizResult[]
   chatMessages ChatMessage[]
+  dailyCheckins DailyCheckin[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
@@ -98,6 +99,25 @@ model ChatMessage {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   sender    Sender
   message   String   @db.Text
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model Waitlist {
+  id        String   @id @default(uuid())
+  email     String
+  feature   String
+  createdAt DateTime @default(now())
+
+  @@unique([email, feature])
+}
+
+model DailyCheckin {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rating    Int
   createdAt DateTime @default(now())
 
   @@index([userId, createdAt])
