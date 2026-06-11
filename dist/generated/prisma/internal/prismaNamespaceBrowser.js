@@ -48,7 +48,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.NullsOrder = exports.QueryMode = exports.SortOrder = exports.ChatMessageScalarFieldEnum = exports.QuizResultScalarFieldEnum = exports.QuestionOptionScalarFieldEnum = exports.QuestionScalarFieldEnum = exports.QuizScalarFieldEnum = exports.UniversityScalarFieldEnum = exports.UserScalarFieldEnum = exports.TransactionIsolationLevel = exports.ModelName = exports.AnyNull = exports.JsonNull = exports.DbNull = exports.NullTypes = exports.Decimal = void 0;
+exports.NullsOrder = exports.QueryMode = exports.SortOrder = exports.DailyCheckinScalarFieldEnum = exports.WaitlistScalarFieldEnum = exports.ChatMessageScalarFieldEnum = exports.QuizResultScalarFieldEnum = exports.QuestionOptionScalarFieldEnum = exports.QuestionScalarFieldEnum = exports.QuizScalarFieldEnum = exports.UniversityScalarFieldEnum = exports.UserScalarFieldEnum = exports.TransactionIsolationLevel = exports.ModelName = exports.AnyNull = exports.JsonNull = exports.DbNull = exports.NullTypes = exports.Decimal = void 0;
 const runtime = __importStar(require("@prisma/client/runtime/index-browser"));
 exports.Decimal = runtime.Decimal;
 exports.NullTypes = {
@@ -81,7 +81,9 @@ exports.ModelName = {
     Question: 'Question',
     QuestionOption: 'QuestionOption',
     QuizResult: 'QuizResult',
-    ChatMessage: 'ChatMessage'
+    ChatMessage: 'ChatMessage',
+    Waitlist: 'Waitlist',
+    DailyCheckin: 'DailyCheckin'
 };
 /*
  * Enums
@@ -149,6 +151,18 @@ exports.ChatMessageScalarFieldEnum = {
     userId: 'userId',
     sender: 'sender',
     message: 'message',
+    createdAt: 'createdAt'
+};
+exports.WaitlistScalarFieldEnum = {
+    id: 'id',
+    email: 'email',
+    feature: 'feature',
+    createdAt: 'createdAt'
+};
+exports.DailyCheckinScalarFieldEnum = {
+    id: 'id',
+    userId: 'userId',
+    rating: 'rating',
     createdAt: 'createdAt'
 };
 exports.SortOrder = {

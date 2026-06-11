@@ -49,6 +49,46 @@ router.get(
 );
 
 /**
+ * GET /api/students/me/daily-checkins
+ *
+ * Fetches historical daily check-ins (mood ratings) for the logged-in student.
+ */
+router.get(
+  '/me/daily-checkins',
+  authenticateJWT,
+  authorizeRoles('STUDENT', 'ADMIN'),
+  async (req: Request, res: Response) => {
+    try {
+      const email = req.user?.email;
+      if (!email) {
+        res.status(401).json({ error: 'Email missing from token' });
+        return;
+      }
+
+      const user = await prisma.user.findUnique({
+        where: { email },
+        include: {
+          dailyCheckins: {
+            orderBy: { createdAt: 'asc' },
+          },
+        },
+      });
+
+      if (!user) {
+        res.status(404).json({ error: 'User not found' });
+        return;
+      }
+
+      res.status(200).json({ checkins: user.dailyCheckins });
+    } catch (error) {
+      console.error('Error fetching historical check-ins:', error);
+      res.status(500).json({ error: 'Failed to fetch historical check-ins' });
+    }
+  }
+);
+
+
+/**
  * POST /api/students/me/daily-checkin
  *
  * Saves/updates the current daily check-in (mood rating) for the logged-in student.

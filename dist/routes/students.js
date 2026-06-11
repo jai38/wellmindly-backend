@@ -6,50 +6,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const prisma_1 = __importDefault(require("../lib/prisma"));
 const jwt_1 = require("../utils/jwt");
-const fs_1 = __importDefault(require("fs"));
-const path_1 = __importDefault(require("path"));
-const CHECKINS_FILE = path_1.default.join(process.cwd(), 'daily-checkins.json');
-function readCheckins() {
-    try {
-        if (!fs_1.default.existsSync(CHECKINS_FILE)) {
-            return {};
-        }
-        const content = fs_1.default.readFileSync(CHECKINS_FILE, 'utf-8');
-        return JSON.parse(content);
-    }
-    catch (err) {
-        console.error('Error reading checkins file:', err);
-        return {};
-    }
-}
-function writeCheckins(data) {
-    try {
-        fs_1.default.writeFileSync(CHECKINS_FILE, JSON.stringify(data, null, 2), 'utf-8');
-    }
-    catch (err) {
-        console.error('Error writing checkins file:', err);
-    }
-}
-function getDailyCheckin(email) {
-    const data = readCheckins();
-    const entry = data[email.toLowerCase()];
-    if (!entry)
-        return null;
-    const today = new Date().toDateString();
-    const entryDate = new Date(entry.date).toDateString();
-    if (today === entryDate) {
-        return entry.rating;
-    }
-    return null;
-}
-function saveDailyCheckin(email, rating) {
-    const data = readCheckins();
-    data[email.toLowerCase()] = {
-        rating,
-        date: new Date().toISOString(),
-    };
-    writeCheckins(data);
-}
 const router = (0, express_1.Router)();
 /**
  * GET /api/students/me/daily-checkin
@@ -63,12 +19,60 @@ router.get('/me/daily-checkin', jwt_1.authenticateJWT, (0, jwt_1.authorizeRoles)
             res.status(401).json({ error: 'Email missing from token' });
             return;
         }
-        const checkin = getDailyCheckin(email);
-        res.status(200).json({ checkin });
+        const user = await prisma_1.default.user.findUnique({
+            where: { email },
+            include: {
+                dailyCheckins: {
+                    orderBy: { createdAt: 'desc' },
+                    take: 1,
+                },
+            },
+        });
+        let rating = null;
+        if (user && user.dailyCheckins.length > 0) {
+            const latestCheckin = user.dailyCheckins[0];
+            const today = new Date().toDateString();
+            const checkinDate = new Date(latestCheckin.createdAt).toDateString();
+            if (today === checkinDate) {
+                rating = latestCheckin.rating;
+            }
+        }
+        res.status(200).json({ checkin: rating });
     }
     catch (error) {
         console.error('Error fetching daily check-in:', error);
         res.status(500).json({ error: 'Failed to fetch daily check-in' });
+    }
+});
+/**
+ * GET /api/students/me/daily-checkins
+ *
+ * Fetches historical daily check-ins (mood ratings) for the logged-in student.
+ */
+router.get('/me/daily-checkins', jwt_1.authenticateJWT, (0, jwt_1.authorizeRoles)('STUDENT', 'ADMIN'), async (req, res) => {
+    try {
+        const email = req.user?.email;
+        if (!email) {
+            res.status(401).json({ error: 'Email missing from token' });
+            return;
+        }
+        const user = await prisma_1.default.user.findUnique({
+            where: { email },
+            include: {
+                dailyCheckins: {
+                    orderBy: { createdAt: 'asc' },
+                },
+            },
+        });
+        if (!user) {
+            res.status(404).json({ error: 'User not found' });
+            return;
+        }
+        res.status(200).json({ checkins: user.dailyCheckins });
+    }
+    catch (error) {
+        console.error('Error fetching historical check-ins:', error);
+        res.status(500).json({ error: 'Failed to fetch historical check-ins' });
     }
 });
 /**
@@ -88,7 +92,37 @@ router.post('/me/daily-checkin', jwt_1.authenticateJWT, (0, jwt_1.authorizeRoles
             res.status(400).json({ error: 'Rating must be an integer between 1 and 5' });
             return;
         }
-        saveDailyCheckin(email, rating);
+        const user = await prisma_1.default.user.findUnique({
+            where: { email },
+        });
+        if (!user) {
+            res.status(404).json({ error: 'User not found' });
+            return;
+        }
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        const existingCheckin = await prisma_1.default.dailyCheckin.findFirst({
+            where: {
+                userId: user.id,
+                createdAt: {
+                    gte: todayStart,
+                },
+            },
+        });
+        if (existingCheckin) {
+            await prisma_1.default.dailyCheckin.update({
+                where: { id: existingCheckin.id },
+                data: { rating },
+            });
+        }
+        else {
+            await prisma_1.default.dailyCheckin.create({
+                data: {
+                    userId: user.id,
+                    rating,
+                },
+            });
+        }
         res.status(200).json({ message: 'Daily check-in saved', rating });
     }
     catch (error) {

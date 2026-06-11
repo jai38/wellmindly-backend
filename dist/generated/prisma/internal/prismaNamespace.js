@@ -48,7 +48,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.defineExtension = exports.NullsOrder = exports.QueryMode = exports.SortOrder = exports.ChatMessageScalarFieldEnum = exports.QuizResultScalarFieldEnum = exports.QuestionOptionScalarFieldEnum = exports.QuestionScalarFieldEnum = exports.QuizScalarFieldEnum = exports.UniversityScalarFieldEnum = exports.UserScalarFieldEnum = exports.TransactionIsolationLevel = exports.ModelName = exports.AnyNull = exports.JsonNull = exports.DbNull = exports.NullTypes = exports.prismaVersion = exports.getExtensionContext = exports.Decimal = exports.Sql = exports.raw = exports.join = exports.empty = exports.sql = exports.PrismaClientValidationError = exports.PrismaClientInitializationError = exports.PrismaClientRustPanicError = exports.PrismaClientUnknownRequestError = exports.PrismaClientKnownRequestError = void 0;
+exports.defineExtension = exports.NullsOrder = exports.QueryMode = exports.SortOrder = exports.DailyCheckinScalarFieldEnum = exports.WaitlistScalarFieldEnum = exports.ChatMessageScalarFieldEnum = exports.QuizResultScalarFieldEnum = exports.QuestionOptionScalarFieldEnum = exports.QuestionScalarFieldEnum = exports.QuizScalarFieldEnum = exports.UniversityScalarFieldEnum = exports.UserScalarFieldEnum = exports.TransactionIsolationLevel = exports.ModelName = exports.AnyNull = exports.JsonNull = exports.DbNull = exports.NullTypes = exports.prismaVersion = exports.getExtensionContext = exports.Decimal = exports.Sql = exports.raw = exports.join = exports.empty = exports.sql = exports.PrismaClientValidationError = exports.PrismaClientInitializationError = exports.PrismaClientRustPanicError = exports.PrismaClientUnknownRequestError = exports.PrismaClientKnownRequestError = void 0;
 const runtime = __importStar(require("@prisma/client/runtime/client"));
 /**
  * Prisma Errors
@@ -109,7 +109,9 @@ exports.ModelName = {
     Question: 'Question',
     QuestionOption: 'QuestionOption',
     QuizResult: 'QuizResult',
-    ChatMessage: 'ChatMessage'
+    ChatMessage: 'ChatMessage',
+    Waitlist: 'Waitlist',
+    DailyCheckin: 'DailyCheckin'
 };
 /**
  * Enums
@@ -177,6 +179,18 @@ exports.ChatMessageScalarFieldEnum = {
     userId: 'userId',
     sender: 'sender',
     message: 'message',
+    createdAt: 'createdAt'
+};
+exports.WaitlistScalarFieldEnum = {
+    id: 'id',
+    email: 'email',
+    feature: 'feature',
+    createdAt: 'createdAt'
+};
+exports.DailyCheckinScalarFieldEnum = {
+    id: 'id',
+    userId: 'userId',
+    rating: 'rating',
     createdAt: 'createdAt'
 };
 exports.SortOrder = {
