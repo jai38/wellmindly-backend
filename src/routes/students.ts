@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { authenticateJWT, authorizeRoles } from '../utils/jwt';
+import { parseStoredClassification } from '../utils/ai';
 const router = Router();
 
 /**
@@ -193,23 +194,28 @@ router.get(
       // --- Structure response payloads for client graphing engines ---
 
       // 1. Timeline series: ordered data points for line/area charts
-      const timeline = results.map((r) => ({
-        id: r.id,
-        date: r.completedAt.toISOString(),
-        score: r.overallScore,
-        maxScore: r.quiz.maxScore,
-        percentage: r.quiz.maxScore > 0
-          ? Math.round((r.overallScore / r.quiz.maxScore) * 100)
-          : 0,
-        classification: r.classification,
-        quizTitle: r.quiz.title,
-        quizCategory: r.quiz.category,
-      }));
+      const timeline = results.map((r) => {
+        const parsed = parseStoredClassification(r.classification);
+        return {
+          id: r.id,
+          date: r.completedAt.toISOString(),
+          score: r.overallScore,
+          maxScore: r.quiz.maxScore,
+          percentage: r.quiz.maxScore > 0
+            ? Math.round((r.overallScore / r.quiz.maxScore) * 100)
+            : 0,
+          classification: parsed.classification,
+          aiFeedback: parsed.aiFeedback || null,
+          quizTitle: r.quiz.title,
+          quizCategory: r.quiz.category,
+        };
+      });
 
       // 2. Classification distribution: counts per severity bucket for pie/donut charts
       const classificationCounts: Record<string, number> = {};
       for (const r of results) {
-        classificationCounts[r.classification] = (classificationCounts[r.classification] || 0) + 1;
+        const parsed = parseStoredClassification(r.classification);
+        classificationCounts[parsed.classification] = (classificationCounts[parsed.classification] || 0) + 1;
       }
       const distribution = Object.entries(classificationCounts).map(([label, count]) => ({
         label,
@@ -219,6 +225,7 @@ router.get(
       // 3. Summary statistics for KPI cards
       const totalAttempts = results.length;
       const latestResult = results.length > 0 ? results[results.length - 1] : null;
+      const latestResultParsed = latestResult ? parseStoredClassification(latestResult.classification) : null;
       const averageScore = totalAttempts > 0
         ? Math.round(results.reduce((sum, r) => sum + r.overallScore, 0) / totalAttempts)
         : 0;
@@ -256,7 +263,8 @@ router.get(
         latestResult: latestResult
           ? {
               score: latestResult.overallScore,
-              classification: latestResult.classification,
+              classification: latestResultParsed?.classification || 'Completed',
+              aiFeedback: latestResultParsed?.aiFeedback || null,
               date: latestResult.completedAt.toISOString(),
               quizTitle: latestResult.quiz.title,
             }

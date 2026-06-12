@@ -14,6 +14,8 @@ const envSchema = z.object({
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
   SMTP_FROM: z.string().optional().default('noreply@wellmindly.com'),
+  GEMINI_API_KEY: z.string().optional(),
+  GEMINI_MODEL: z.string().optional().default('gemini-2.5-flash'),
 });
 
 const _env = envSchema.safeParse(process.env);

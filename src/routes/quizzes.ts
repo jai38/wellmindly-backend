@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { authenticateJWT, authorizeRoles } from '../utils/jwt';
+import { generateQuizFeedback, parseStoredClassification } from '../utils/ai';
 
 const router = Router();
 
@@ -220,13 +221,35 @@ router.post(
         classification = 'Severe Depression';
       }
 
+      let storedClassification = classification || 'Completed';
+
+      // Call Gemini if API key is present
+      try {
+        const aiFeedback = await generateQuizFeedback(
+          quiz?.title || quizTitle || 'Self-reflection Test',
+          quizCategory || 'General',
+          overallScore,
+          quiz?.maxScore || maxScore || 100,
+          classification || 'Completed'
+        );
+
+        if (aiFeedback) {
+          storedClassification = JSON.stringify({
+            classification: classification || 'Completed',
+            aiFeedback
+          });
+        }
+      } catch (aiErr) {
+        console.error('Failed to generate AI feedback:', aiErr);
+      }
+
       // Store values to the QuizResult database table using Prisma
       const quizResult = await prisma.quizResult.create({
         data: {
           userId,
           quizId: quizId!,
           overallScore,
-          classification: classification || 'Completed',
+          classification: storedClassification,
         },
         include: {
           quiz: {
@@ -238,7 +261,12 @@ router.post(
         },
       });
 
-      res.status(201).json(quizResult);
+      const parsed = parseStoredClassification(quizResult.classification);
+      res.status(201).json({
+        ...quizResult,
+        classification: parsed.classification,
+        aiFeedback: parsed.aiFeedback || null,
+      });
     } catch (error) {
       console.error('Error submitting quiz:', error);
       res.status(500).json({ error: 'Failed to process quiz submission' });
