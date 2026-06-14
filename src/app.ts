@@ -8,6 +8,7 @@ import quizzesRouter from './routes/quizzes';
 import studentsRouter from './routes/students';
 import adminRouter from './routes/admin';
 import universityRouter from './routes/university';
+import chatRouter from './routes/chat';
 
 const app = express();
 
@@ -61,6 +62,7 @@ app.use('/api/quizzes', quizzesRouter);
 app.use('/api/students', studentsRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/university', universityRouter);
+app.use('/api/chat', chatRouter);
 
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', message: 'API is healthy' });

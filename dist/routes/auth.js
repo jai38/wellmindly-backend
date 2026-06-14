@@ -8,6 +8,7 @@ const google_auth_library_1 = require("google-auth-library");
 const prisma_1 = __importDefault(require("../lib/prisma"));
 const jwt_1 = require("../lib/jwt");
 const env_1 = require("../config/env");
+const mailer_1 = require("../utils/mailer");
 const router = (0, express_1.Router)();
 const googleClient = new google_auth_library_1.OAuth2Client(env_1.env.GOOGLE_CLIENT_ID);
 /**
@@ -99,16 +100,109 @@ router.post('/send-otp', async (req, res) => {
     }
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes expiration
-    otpStore.set(email.toLowerCase(), { code, expiresAt });
-    console.log(`
-==================================================
-📧  WELLMINDLY EMAIL VERIFICATION
-To: ${email}
-Code: ${code}
-Expires in: 5 minutes
-==================================================
-  `);
-    res.status(200).json({ message: 'Verification code sent to your email.' });
+    const emailLower = email.toLowerCase().trim();
+    otpStore.set(emailLower, { code, expiresAt });
+    try {
+        await (0, mailer_1.sendEmail)({
+            to: emailLower,
+            subject: 'Verify Your Account - WellMindly',
+            html: (0, mailer_1.getOtpTemplate)(code, 'register'),
+        });
+        res.status(200).json({ message: 'Verification code sent to your email.' });
+    }
+    catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Failed to send verification code. Please try again.' });
+    }
+});
+/**
+ * POST /api/auth/forgot-password
+ *
+ * Generates and sends a 6-digit OTP code to the user for resetting their password.
+ */
+router.post('/forgot-password', async (req, res) => {
+    const { email } = req.body;
+    if (!email) {
+        res.status(400).json({ error: 'Email is required' });
+        return;
+    }
+    const emailLower = email.toLowerCase().trim();
+    try {
+        const user = await prisma_1.default.user.findUnique({
+            where: { email: emailLower },
+        });
+        if (!user) {
+            res.status(400).json({ error: 'Email address not found' });
+            return;
+        }
+        const code = Math.floor(100000 + Math.random() * 900000).toString();
+        const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes expiration
+        otpStore.set(emailLower, { code, expiresAt });
+        await (0, mailer_1.sendEmail)({
+            to: emailLower,
+            subject: 'Reset Your Password - WellMindly',
+            html: (0, mailer_1.getOtpTemplate)(code, 'forgot_password'),
+        });
+        res.status(200).json({ message: 'Password reset verification code sent.' });
+    }
+    catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Failed to process forgot password. Please try again.' });
+    }
+});
+/**
+ * POST /api/auth/reset-password
+ *
+ * Resets password using the received OTP code.
+ */
+router.post('/reset-password', async (req, res) => {
+    const { email, otp, newPassword, role } = req.body;
+    if (!email || !otp || !newPassword) {
+        res.status(400).json({ error: 'Email, verification code, and new password are required' });
+        return;
+    }
+    const emailLower = email.toLowerCase().trim();
+    const storedOtp = otpStore.get(emailLower);
+    if (!storedOtp) {
+        res.status(400).json({ error: 'Please request a verification code first' });
+        return;
+    }
+    if (Date.now() > storedOtp.expiresAt) {
+        otpStore.delete(emailLower);
+        res.status(400).json({ error: 'Verification code has expired' });
+        return;
+    }
+    if (storedOtp.code !== otp.trim()) {
+        res.status(400).json({ error: 'Incorrect verification code' });
+        return;
+    }
+    try {
+        const user = await prisma_1.default.user.findUnique({
+            where: { email: emailLower },
+        });
+        if (!user) {
+            res.status(400).json({ error: 'User not found' });
+            return;
+        }
+        if (role && user.role !== role) {
+            res.status(403).json({ error: 'Unauthorized role reset' });
+            return;
+        }
+        const bcrypt = require('bcrypt');
+        const saltRounds = 10;
+        const passwordHash = await bcrypt.hash(newPassword, saltRounds);
+        await prisma_1.default.user.update({
+            where: { email: emailLower },
+            data: { passwordHash },
+        });
+        // Clear OTP on successful reset
+        otpStore.delete(emailLower);
+        res.status(200).json({ message: 'Password has been reset successfully.' });
+    }
+    catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Failed to reset password. Please try again.' });
+    }
 });
 /**
  * POST /api/auth/login

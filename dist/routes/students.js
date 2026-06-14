@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const prisma_1 = __importDefault(require("../lib/prisma"));
 const jwt_1 = require("../utils/jwt");
+const ai_1 = require("../utils/ai");
 const router = (0, express_1.Router)();
 /**
  * GET /api/students/me/daily-checkin
@@ -162,22 +163,28 @@ router.get('/me/results', jwt_1.authenticateJWT, (0, jwt_1.authorizeRoles)('STUD
         });
         // --- Structure response payloads for client graphing engines ---
         // 1. Timeline series: ordered data points for line/area charts
-        const timeline = results.map((r) => ({
-            id: r.id,
-            date: r.completedAt.toISOString(),
-            score: r.overallScore,
-            maxScore: r.quiz.maxScore,
-            percentage: r.quiz.maxScore > 0
-                ? Math.round((r.overallScore / r.quiz.maxScore) * 100)
-                : 0,
-            classification: r.classification,
-            quizTitle: r.quiz.title,
-            quizCategory: r.quiz.category,
-        }));
+        const timeline = results.map((r) => {
+            const parsed = (0, ai_1.parseStoredClassification)(r.classification);
+            return {
+                id: r.id,
+                date: r.completedAt.toISOString(),
+                score: r.overallScore,
+                maxScore: r.quiz.maxScore,
+                percentage: r.quiz.maxScore > 0
+                    ? Math.round((r.overallScore / r.quiz.maxScore) * 100)
+                    : 0,
+                classification: parsed.classification,
+                aiFeedback: parsed.aiFeedback || null,
+                answers: parsed.answers || null,
+                quizTitle: r.quiz.title,
+                quizCategory: r.quiz.category,
+            };
+        });
         // 2. Classification distribution: counts per severity bucket for pie/donut charts
         const classificationCounts = {};
         for (const r of results) {
-            classificationCounts[r.classification] = (classificationCounts[r.classification] || 0) + 1;
+            const parsed = (0, ai_1.parseStoredClassification)(r.classification);
+            classificationCounts[parsed.classification] = (classificationCounts[parsed.classification] || 0) + 1;
         }
         const distribution = Object.entries(classificationCounts).map(([label, count]) => ({
             label,
@@ -185,7 +192,18 @@ router.get('/me/results', jwt_1.authenticateJWT, (0, jwt_1.authorizeRoles)('STUD
         }));
         // 3. Summary statistics for KPI cards
         const totalAttempts = results.length;
-        const latestResult = results.length > 0 ? results[results.length - 1] : null;
+        // Filter for baseline screening / clinical wellness assessments
+        const screeningResults = results.filter((r) => {
+            const title = r.quiz.title.toLowerCase();
+            const category = r.quiz.category.toLowerCase();
+            return (title.includes('phq-9') ||
+                title.includes('check-in') ||
+                category.includes('depression') ||
+                category.includes('clinical') ||
+                category.includes('wellbeing'));
+        });
+        const latestResult = screeningResults.length > 0 ? screeningResults[screeningResults.length - 1] : null;
+        const latestResultParsed = latestResult ? (0, ai_1.parseStoredClassification)(latestResult.classification) : null;
         const averageScore = totalAttempts > 0
             ? Math.round(results.reduce((sum, r) => sum + r.overallScore, 0) / totalAttempts)
             : 0;
@@ -221,7 +239,10 @@ router.get('/me/results', jwt_1.authenticateJWT, (0, jwt_1.authorizeRoles)('STUD
             latestResult: latestResult
                 ? {
                     score: latestResult.overallScore,
-                    classification: latestResult.classification,
+                    maxScore: latestResult.quiz.maxScore,
+                    classification: latestResultParsed?.classification || 'Completed',
+                    aiFeedback: latestResultParsed?.aiFeedback || null,
+                    answers: latestResultParsed?.answers || null,
                     date: latestResult.completedAt.toISOString(),
                     quizTitle: latestResult.quiz.title,
                 }
@@ -234,6 +255,31 @@ router.get('/me/results', jwt_1.authenticateJWT, (0, jwt_1.authorizeRoles)('STUD
     catch (error) {
         console.error('Error fetching student results:', error);
         res.status(500).json({ error: 'Failed to fetch student results' });
+    }
+});
+/**
+ * GET /api/students/hotlines
+ *
+ * Fetches all crisis hotlines from the database, grouped by category.
+ * Protected by JWT authentication.
+ */
+router.get('/hotlines', async (_req, res) => {
+    try {
+        const hotlines = await prisma_1.default.crisisHotline.findMany({
+            orderBy: [{ category: 'asc' }, { name: 'asc' }],
+        });
+        // Group hotlines by category for the frontend
+        const grouped = {};
+        for (const h of hotlines) {
+            if (!grouped[h.category])
+                grouped[h.category] = [];
+            grouped[h.category].push(h);
+        }
+        res.status(200).json({ hotlines, grouped });
+    }
+    catch (error) {
+        console.error('Error fetching crisis hotlines:', error);
+        res.status(500).json({ error: 'Failed to fetch crisis hotlines' });
     }
 });
 exports.default = router;

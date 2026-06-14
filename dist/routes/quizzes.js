@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const prisma_1 = __importDefault(require("../lib/prisma"));
 const jwt_1 = require("../utils/jwt");
+const ai_1 = require("../utils/ai");
 const router = (0, express_1.Router)();
 /**
  * GET /api/quizzes/:id/questions
@@ -219,13 +220,31 @@ router.post('/submit', jwt_1.authenticateJWT, (0, jwt_1.authorizeRoles)('STUDENT
         if (overallScore > 15 && quiz?.title.toLowerCase().includes('phq-9')) {
             classification = 'Severe Depression';
         }
+        let storedClassification = classification || 'Completed';
+        let aiFeedbackResult = null;
+        // Call Gemini if API key is present
+        try {
+            const aiFeedback = await (0, ai_1.generateQuizFeedback)(quiz?.title || quizTitle || 'Self-reflection Test', quizCategory || 'General', overallScore, quiz?.maxScore || maxScore || 100, classification || 'Completed');
+            if (aiFeedback) {
+                aiFeedbackResult = aiFeedback;
+            }
+        }
+        catch (aiErr) {
+            console.error('Failed to generate AI feedback:', aiErr);
+        }
+        // Always serialize to JSON string to record detailed answers
+        storedClassification = JSON.stringify({
+            classification: classification || 'Completed',
+            aiFeedback: aiFeedbackResult,
+            answers: req.body.answers || req.body.scores || req.body || null,
+        });
         // Store values to the QuizResult database table using Prisma
         const quizResult = await prisma_1.default.quizResult.create({
             data: {
                 userId,
                 quizId: quizId,
                 overallScore,
-                classification: classification || 'Completed',
+                classification: storedClassification,
             },
             include: {
                 quiz: {
@@ -236,11 +255,56 @@ router.post('/submit', jwt_1.authenticateJWT, (0, jwt_1.authorizeRoles)('STUDENT
                 },
             },
         });
-        res.status(201).json(quizResult);
+        const parsed = (0, ai_1.parseStoredClassification)(quizResult.classification);
+        res.status(201).json({
+            ...quizResult,
+            classification: parsed.classification,
+            aiFeedback: parsed.aiFeedback || null,
+        });
     }
     catch (error) {
         console.error('Error submitting quiz:', error);
         res.status(500).json({ error: 'Failed to process quiz submission' });
+    }
+});
+/**
+ * POST /api/quizzes/:resultId/feedback
+ *
+ * Submits user rating and comments feedback for a completed quiz result.
+ * Protected by JWT authentication.
+ */
+router.post('/:resultId/feedback', jwt_1.authenticateJWT, (0, jwt_1.authorizeRoles)('STUDENT', 'ADMIN'), async (req, res) => {
+    try {
+        const resultId = req.params.resultId;
+        if (typeof resultId !== 'string') {
+            res.status(400).json({ error: 'Invalid result ID' });
+            return;
+        }
+        const { rating, comments } = req.body;
+        if (rating === undefined || rating < 1 || rating > 5) {
+            res.status(400).json({ error: 'Rating must be an integer between 1 and 5' });
+            return;
+        }
+        // Verify the quiz result exists and belongs to the current user
+        const userId = req.user?.sub;
+        const result = await prisma_1.default.quizResult.findFirst({
+            where: { id: resultId, userId },
+        });
+        if (!result) {
+            res.status(404).json({ error: 'Quiz result not found or access denied' });
+            return;
+        }
+        // Upsert feedback
+        const feedback = await prisma_1.default.quizFeedback.upsert({
+            where: { resultId },
+            update: { rating, comments },
+            create: { resultId, rating, comments },
+        });
+        res.status(201).json({ message: 'Feedback submitted successfully', feedback });
+    }
+    catch (error) {
+        console.error('Error submitting quiz feedback:', error);
+        res.status(500).json({ error: 'Failed to submit feedback' });
     }
 });
 exports.default = router;
