@@ -115,14 +115,15 @@ Provide personalized, brand-aligned feedback based on this result.`;
  * If serialized JSON (with aiFeedback), extracts clean classification and aiFeedback object.
  * Otherwise returns the raw value as classification.
  */
-export function parseStoredClassification(val: string): { classification: string; aiFeedback?: QuizFeedback } {
+export function parseStoredClassification(val: string): { classification: string; aiFeedback?: QuizFeedback; answers?: any } {
   if (val && val.trim().startsWith('{')) {
     try {
       const parsed = JSON.parse(val);
-      if (parsed && typeof parsed === 'object' && parsed.classification && parsed.aiFeedback) {
+      if (parsed && typeof parsed === 'object') {
         return {
-          classification: parsed.classification,
-          aiFeedback: parsed.aiFeedback
+          classification: parsed.classification || 'Completed',
+          aiFeedback: parsed.aiFeedback,
+          answers: parsed.answers || null,
         };
       }
     } catch (e) {

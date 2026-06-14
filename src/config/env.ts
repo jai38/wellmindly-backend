@@ -16,6 +16,7 @@ const envSchema = z.object({
   SMTP_FROM: z.string().optional().default('noreply@wellmindly.com'),
   GEMINI_API_KEY: z.string().optional(),
   GEMINI_MODEL: z.string().optional().default('gemini-2.5-flash'),
+  ALLOWED_ORIGINS: z.string().optional().default('http://localhost:5173,http://localhost:5174,https://wellmindly.com'),
 });
 
 const _env = envSchema.safeParse(process.env);

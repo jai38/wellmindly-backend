@@ -206,6 +206,7 @@ router.get(
             : 0,
           classification: parsed.classification,
           aiFeedback: parsed.aiFeedback || null,
+          answers: parsed.answers || null,
           quizTitle: r.quiz.title,
           quizCategory: r.quiz.category,
         };
@@ -224,7 +225,21 @@ router.get(
 
       // 3. Summary statistics for KPI cards
       const totalAttempts = results.length;
-      const latestResult = results.length > 0 ? results[results.length - 1] : null;
+
+      // Filter for baseline screening / clinical wellness assessments
+      const screeningResults = results.filter((r) => {
+        const title = r.quiz.title.toLowerCase();
+        const category = r.quiz.category.toLowerCase();
+        return (
+          title.includes('phq-9') ||
+          title.includes('check-in') ||
+          category.includes('depression') ||
+          category.includes('clinical') ||
+          category.includes('wellbeing')
+        );
+      });
+
+      const latestResult = screeningResults.length > 0 ? screeningResults[screeningResults.length - 1] : null;
       const latestResultParsed = latestResult ? parseStoredClassification(latestResult.classification) : null;
       const averageScore = totalAttempts > 0
         ? Math.round(results.reduce((sum, r) => sum + r.overallScore, 0) / totalAttempts)
@@ -263,8 +278,10 @@ router.get(
         latestResult: latestResult
           ? {
               score: latestResult.overallScore,
+              maxScore: latestResult.quiz.maxScore,
               classification: latestResultParsed?.classification || 'Completed',
               aiFeedback: latestResultParsed?.aiFeedback || null,
+              answers: latestResultParsed?.answers || null,
               date: latestResult.completedAt.toISOString(),
               quizTitle: latestResult.quiz.title,
             }
@@ -276,6 +293,35 @@ router.get(
     } catch (error) {
       console.error('Error fetching student results:', error);
       res.status(500).json({ error: 'Failed to fetch student results' });
+    }
+  }
+);
+
+/**
+ * GET /api/students/hotlines
+ *
+ * Fetches all crisis hotlines from the database, grouped by category.
+ * Protected by JWT authentication.
+ */
+router.get(
+  '/hotlines',
+  async (_req: Request, res: Response) => {
+    try {
+      const hotlines = await prisma.crisisHotline.findMany({
+        orderBy: [{ category: 'asc' }, { name: 'asc' }],
+      });
+
+      // Group hotlines by category for the frontend
+      const grouped: Record<string, typeof hotlines> = {};
+      for (const h of hotlines) {
+        if (!grouped[h.category]) grouped[h.category] = [];
+        grouped[h.category].push(h);
+      }
+
+      res.status(200).json({ hotlines, grouped });
+    } catch (error) {
+      console.error('Error fetching crisis hotlines:', error);
+      res.status(500).json({ error: 'Failed to fetch crisis hotlines' });
     }
   }
 );

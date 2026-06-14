@@ -222,6 +222,7 @@ router.post(
       }
 
       let storedClassification = classification || 'Completed';
+      let aiFeedbackResult = null;
 
       // Call Gemini if API key is present
       try {
@@ -234,14 +235,18 @@ router.post(
         );
 
         if (aiFeedback) {
-          storedClassification = JSON.stringify({
-            classification: classification || 'Completed',
-            aiFeedback
-          });
+          aiFeedbackResult = aiFeedback;
         }
       } catch (aiErr) {
         console.error('Failed to generate AI feedback:', aiErr);
       }
+
+      // Always serialize to JSON string to record detailed answers
+      storedClassification = JSON.stringify({
+        classification: classification || 'Completed',
+        aiFeedback: aiFeedbackResult,
+        answers: req.body.answers || req.body.scores || req.body || null,
+      });
 
       // Store values to the QuizResult database table using Prisma
       const quizResult = await prisma.quizResult.create({
@@ -270,6 +275,56 @@ router.post(
     } catch (error) {
       console.error('Error submitting quiz:', error);
       res.status(500).json({ error: 'Failed to process quiz submission' });
+    }
+  }
+);
+
+/**
+ * POST /api/quizzes/:resultId/feedback
+ *
+ * Submits user rating and comments feedback for a completed quiz result.
+ * Protected by JWT authentication.
+ */
+router.post(
+  '/:resultId/feedback',
+  authenticateJWT,
+  authorizeRoles('STUDENT', 'ADMIN'),
+  async (req: Request, res: Response) => {
+    try {
+      const resultId = req.params.resultId;
+      if (typeof resultId !== 'string') {
+        res.status(400).json({ error: 'Invalid result ID' });
+        return;
+      }
+      const { rating, comments } = req.body as { rating?: number; comments?: string };
+
+      if (rating === undefined || rating < 1 || rating > 5) {
+        res.status(400).json({ error: 'Rating must be an integer between 1 and 5' });
+        return;
+      }
+
+      // Verify the quiz result exists and belongs to the current user
+      const userId = req.user?.sub;
+      const result = await prisma.quizResult.findFirst({
+        where: { id: resultId, userId },
+      });
+
+      if (!result) {
+        res.status(404).json({ error: 'Quiz result not found or access denied' });
+        return;
+      }
+
+      // Upsert feedback
+      const feedback = await prisma.quizFeedback.upsert({
+        where: { resultId },
+        update: { rating, comments },
+        create: { resultId, rating, comments },
+      });
+
+      res.status(201).json({ message: 'Feedback submitted successfully', feedback });
+    } catch (error) {
+      console.error('Error submitting quiz feedback:', error);
+      res.status(500).json({ error: 'Failed to submit feedback' });
     }
   }
 );
