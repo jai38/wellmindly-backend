@@ -6,6 +6,21 @@ import prisma from '../lib/prisma';
 
 const router = Router();
 
+// Helper to determine daily limit based on the model in use to support 100 users daily
+function getMaxRequestsForModel(modelName: string): number {
+  const name = modelName.toLowerCase();
+  if (name.includes('pro')) {
+    return 10; // 1K limit / 100 users = 10
+  }
+  if (name.includes('lite')) {
+    return 100; // Unlimited or very high limit
+  }
+  if (name.includes('gemma')) {
+    return 10;
+  }
+  return 100; // 10K limit / 100 users = 100 (gemini-3.5-flash, gemini-2.5-flash)
+}
+
 // Helper to calculate total user requests today
 async function getDailyRequestsUsed(userId: string): Promise<number> {
   const startOfToday = new Date();
@@ -48,7 +63,8 @@ router.get(
       }
 
       const dailyRequestsUsed = await getDailyRequestsUsed(userId);
-      const maxRequests = env.CHAT_SESSION_MAX_REQUESTS;
+      const modelName = env.GEMINI_MODEL || 'gemini-3.5-flash';
+      const maxRequests = getMaxRequestsForModel(modelName);
       const remainingPercent = Math.max(0, 100 - Math.round((dailyRequestsUsed / maxRequests) * 100));
 
       res.status(200).json({
@@ -88,7 +104,8 @@ router.post(
         return;
       }
 
-      const maxRequests = env.CHAT_SESSION_MAX_REQUESTS;
+      const modelName = env.GEMINI_MODEL || 'gemini-3.5-flash';
+      const maxRequests = getMaxRequestsForModel(modelName);
       const dailyRequestsUsed = await getDailyRequestsUsed(userId);
       let remainingPercent = Math.max(0, 100 - Math.round((dailyRequestsUsed / maxRequests) * 100));
 
@@ -137,10 +154,11 @@ router.post(
 
         // Sequential fallback list
         const modelsToTry = Array.from(new Set([
-          env.GEMINI_MODEL || 'gemma-4-26b-a4b-it',
-          'gemma-4-26b-a4b-it',
-          'gemma-4-31b-it',
-          'gemini-3.1-flash-lite'
+          env.GEMINI_MODEL || 'gemini-3.5-flash',
+          'gemini-3.5-flash',
+          'gemini-2.5-flash',
+          'gemini-3.1-flash-lite',
+          'gemini-2.5-pro'
         ]));
 
         let apiSuccess = false;

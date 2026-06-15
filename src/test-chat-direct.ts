@@ -13,7 +13,7 @@ async function run() {
   try {
     console.log("Initializing model with systemInstruction...");
     const model = genAI.getGenerativeModel({
-      model: 'gemma-4-26b-a4b-it',
+      model: env.GEMINI_MODEL || 'gemini-3.5-flash',
       systemInstruction,
     });
     

@@ -24,7 +24,7 @@ export function getGeminiChatSession(systemInstruction?: string) {
     throw new Error('Gemini API client is not initialized. Please set GEMINI_API_KEY.');
   }
   const model = genAI.getGenerativeModel({
-    model: env.GEMINI_MODEL || 'gemini-2.5-flash',
+    model: env.GEMINI_MODEL || 'gemini-3.5-flash',
     systemInstruction,
   });
   return model.startChat();
@@ -53,7 +53,7 @@ export async function generateQuizFeedback(
     return null;
   }
 
-  const modelName = env.GEMINI_MODEL || 'gemini-2.5-flash';
+  const modelName = env.GEMINI_MODEL || 'gemini-3.5-flash';
   
   try {
     const model = genAI.getGenerativeModel({
