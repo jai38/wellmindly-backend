@@ -27,7 +27,7 @@ function getGeminiChatSession(systemInstruction) {
         throw new Error('Gemini API client is not initialized. Please set GEMINI_API_KEY.');
     }
     const model = genAI.getGenerativeModel({
-        model: env_1.env.GEMINI_MODEL || 'gemini-2.5-flash',
+        model: env_1.env.GEMINI_MODEL || 'gemini-3.5-flash',
         systemInstruction,
     });
     return model.startChat();
@@ -41,14 +41,15 @@ async function generateQuizFeedback(quizTitle, category, overallScore, maxScore,
         console.log('Gemini API key is not configured. Falling back to static client responses.');
         return null;
     }
-    const modelName = env_1.env.GEMINI_MODEL || 'gemini-2.5-flash';
-    try {
-        const model = genAI.getGenerativeModel({
-            model: modelName,
-            generationConfig: {
-                responseMimeType: 'application/json',
-            },
-            systemInstruction: `You are an AI assistant helping a student understand their self-reflection quiz results.
+    const modelsToTry = Array.from(new Set([
+        env_1.env.GEMINI_MODEL || 'gemini-2.0-flash-lite',
+        'gemini-2.0-flash-lite',
+        'gemini-2.0-flash',
+        'gemini-3.5-flash',
+        'gemini-2.5-flash',
+        'gemini-2.5-pro'
+    ]));
+    const systemInstruction = `You are an AI assistant helping a student understand their self-reflection quiz results.
 Speak in the WellMindly brand voice:
 - Tone: A thoughtful older friend who actually gets it.
 - Style: Short sentences. Plain words. No wellness-speak.
@@ -65,31 +66,44 @@ You must return a valid JSON object matching this schema:
     "A brand-aligned detailed observation about what they might be carrying (e.g., 'Saying yes to everyone else leaves you with a very quiet battery for yourself.')",
     "Another brand-aligned detailed insight based on their specific score/answers (e.g., 'Sleep has felt less like actual rest and more like just switching off the lights.')"
   ]
-}`,
-        });
-        const prompt = `
+}`;
+    const prompt = `
 Quiz Title: ${quizTitle}
 Category/Focus: ${category}
 User Result Summary / Classification: ${classification}
 Overall Score: ${overallScore} out of ${maxScore}
 
 Provide personalized, brand-aligned feedback based on this result.`;
-        const result = await model.generateContent(prompt);
-        const text = result.response.text();
-        if (!text) {
-            return null;
+    let lastError = null;
+    for (const modelName of modelsToTry) {
+        try {
+            console.log(`[aiFeedback] Attempting quiz feedback using model: ${modelName}`);
+            const model = genAI.getGenerativeModel({
+                model: modelName,
+                generationConfig: {
+                    responseMimeType: 'application/json',
+                },
+                systemInstruction,
+            });
+            const result = await model.generateContent(prompt);
+            const text = result.response.text();
+            if (!text) {
+                continue;
+            }
+            const feedback = JSON.parse(text);
+            // Safety check for empty or incorrect JSON fields
+            if (feedback.headline && feedback.narrative && feedback.tip && Array.isArray(feedback.insights)) {
+                console.log(`[aiFeedback] ✅ Success! Feedback generated using model: ${modelName}`);
+                return feedback;
+            }
         }
-        const feedback = JSON.parse(text);
-        // Safety check for empty or incorrect JSON fields
-        if (feedback.headline && feedback.narrative && feedback.tip && Array.isArray(feedback.insights)) {
-            return feedback;
+        catch (error) {
+            console.warn(`[aiFeedback] ⚠️ Model ${modelName} call failed or quota exceeded:`, error.message || error);
+            lastError = error;
         }
-        return null;
     }
-    catch (error) {
-        console.error('Error generating AI quiz feedback with Gemini:', error);
-        return null;
-    }
+    console.error('All model attempts failed in quiz feedback fallback chain:', lastError);
+    return null;
 }
 /**
  * Parses classification field from database.

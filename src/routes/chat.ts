@@ -9,16 +9,22 @@ const router = Router();
 // Helper to determine daily limit based on the model in use to support 100 users daily
 function getMaxRequestsForModel(modelName: string): number {
   const name = modelName.toLowerCase();
-  if (name.includes('pro')) {
+  if (name.includes('2.5-pro') || name.includes('pro')) {
     return 10; // 1K limit / 100 users = 10
   }
-  if (name.includes('lite')) {
-    return 100; // Unlimited or very high limit
+  if (name.includes('2.5-flash') || name.includes('3.5-flash')) {
+    return 100; // 10K limit / 100 users = 100
+  }
+  if (name.includes('2.0-flash-lite') || name.includes('lite')) {
+    return 1000; // Unlimited daily limit -> high default safety limit per user
+  }
+  if (name.includes('2.0-flash')) {
+    return 1000; // Unlimited daily limit -> high default safety limit per user
   }
   if (name.includes('gemma')) {
     return 10;
   }
-  return 100; // 10K limit / 100 users = 100 (gemini-3.5-flash, gemini-2.5-flash)
+  return 100; // Default fallback
 }
 
 // Helper to calculate total user requests today
@@ -154,10 +160,11 @@ router.post(
 
         // Sequential fallback list
         const modelsToTry = Array.from(new Set([
-          env.GEMINI_MODEL || 'gemini-3.5-flash',
+          env.GEMINI_MODEL || 'gemini-2.0-flash-lite',
+          'gemini-2.0-flash-lite',
+          'gemini-2.0-flash',
           'gemini-3.5-flash',
           'gemini-2.5-flash',
-          'gemini-3.1-flash-lite',
           'gemini-2.5-pro'
         ]));
 

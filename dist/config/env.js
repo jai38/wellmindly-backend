@@ -19,9 +19,9 @@ const envSchema = zod_1.z.object({
     SMTP_PASS: zod_1.z.string().optional(),
     SMTP_FROM: zod_1.z.string().optional().default('noreply@wellmindly.com'),
     GEMINI_API_KEY: zod_1.z.string().optional(),
-    GEMINI_MODEL: zod_1.z.string().optional().default('gemma-4-26b-a4b-it'),
+    GEMINI_MODEL: zod_1.z.string().optional().default('gemini-3.5-flash'),
     ALLOWED_ORIGINS: zod_1.z.string().optional().default('http://localhost:5173,http://localhost:5174,https://wellmindly.com'),
-    CHAT_SESSION_MAX_REQUESTS: zod_1.z.coerce.number().default(60),
+    CHAT_SESSION_MAX_REQUESTS: zod_1.z.coerce.number().default(100),
 });
 const _env = envSchema.safeParse(process.env);
 if (!_env.success) {

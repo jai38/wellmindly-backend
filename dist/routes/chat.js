@@ -9,6 +9,26 @@ const ai_1 = require("../utils/ai");
 const env_1 = require("../config/env");
 const prisma_1 = __importDefault(require("../lib/prisma"));
 const router = (0, express_1.Router)();
+// Helper to determine daily limit based on the model in use to support 100 users daily
+function getMaxRequestsForModel(modelName) {
+    const name = modelName.toLowerCase();
+    if (name.includes('2.5-pro') || name.includes('pro')) {
+        return 10; // 1K limit / 100 users = 10
+    }
+    if (name.includes('2.5-flash') || name.includes('3.5-flash')) {
+        return 100; // 10K limit / 100 users = 100
+    }
+    if (name.includes('2.0-flash-lite') || name.includes('lite')) {
+        return 1000; // Unlimited daily limit -> high default safety limit per user
+    }
+    if (name.includes('2.0-flash')) {
+        return 1000; // Unlimited daily limit -> high default safety limit per user
+    }
+    if (name.includes('gemma')) {
+        return 10;
+    }
+    return 100; // Default fallback
+}
 // Helper to calculate total user requests today
 async function getDailyRequestsUsed(userId) {
     const startOfToday = new Date();
@@ -43,7 +63,8 @@ router.get('/session/:sessionId', jwt_1.authenticateJWT, (0, jwt_1.authorizeRole
             return;
         }
         const dailyRequestsUsed = await getDailyRequestsUsed(userId);
-        const maxRequests = env_1.env.CHAT_SESSION_MAX_REQUESTS;
+        const modelName = env_1.env.GEMINI_MODEL || 'gemini-3.5-flash';
+        const maxRequests = getMaxRequestsForModel(modelName);
         const remainingPercent = Math.max(0, 100 - Math.round((dailyRequestsUsed / maxRequests) * 100));
         res.status(200).json({
             sessionId: req.params.sessionId,
@@ -70,7 +91,8 @@ router.post('/message', jwt_1.authenticateJWT, (0, jwt_1.authorizeRoles)('STUDEN
             res.status(400).json({ error: 'Session ID and message are required' });
             return;
         }
-        const maxRequests = env_1.env.CHAT_SESSION_MAX_REQUESTS;
+        const modelName = env_1.env.GEMINI_MODEL || 'gemini-3.5-flash';
+        const maxRequests = getMaxRequestsForModel(modelName);
         const dailyRequestsUsed = await getDailyRequestsUsed(userId);
         let remainingPercent = Math.max(0, 100 - Math.round((dailyRequestsUsed / maxRequests) * 100));
         // If no capacity remaining, return static fallback
@@ -113,10 +135,12 @@ router.post('/message', jwt_1.authenticateJWT, (0, jwt_1.authorizeRoles)('STUDEN
             }
             // Sequential fallback list
             const modelsToTry = Array.from(new Set([
-                env_1.env.GEMINI_MODEL || 'gemma-4-26b-a4b-it',
-                'gemma-4-26b-a4b-it',
-                'gemma-4-31b-it',
-                'gemini-3.1-flash-lite'
+                env_1.env.GEMINI_MODEL || 'gemini-2.0-flash-lite',
+                'gemini-2.0-flash-lite',
+                'gemini-2.0-flash',
+                'gemini-3.5-flash',
+                'gemini-2.5-flash',
+                'gemini-2.5-pro'
             ]));
             let apiSuccess = false;
             let lastError = null;
