@@ -12,7 +12,7 @@ async function main() {
       data: {
         title: 'PHQ-9 Wellness Assessment',
         description: 'A brief, 9-question depression severity assessment.',
-        category: 'Clinical',
+        category: 'Self-check',
         totalQuestions: 5, // Mocking 5 for our standard wizard test
         maxScore: 15,
       }

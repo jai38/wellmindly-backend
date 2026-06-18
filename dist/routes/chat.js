@@ -135,11 +135,11 @@ router.post('/message', jwt_1.authenticateJWT, (0, jwt_1.authorizeRoles)('STUDEN
             }
             // Sequential fallback list
             const modelsToTry = Array.from(new Set([
-                env_1.env.GEMINI_MODEL || 'gemini-2.0-flash-lite',
+                'gemini-2.5-flash',
+                env_1.env.GEMINI_MODEL || 'gemini-2.5-flash',
                 'gemini-2.0-flash-lite',
                 'gemini-2.0-flash',
                 'gemini-3.5-flash',
-                'gemini-2.5-flash',
                 'gemini-2.5-pro'
             ]));
             let apiSuccess = false;

@@ -42,11 +42,11 @@ async function generateQuizFeedback(quizTitle, category, overallScore, maxScore,
         return null;
     }
     const modelsToTry = Array.from(new Set([
-        env_1.env.GEMINI_MODEL || 'gemini-2.0-flash-lite',
+        'gemini-2.5-flash',
+        env_1.env.GEMINI_MODEL || 'gemini-2.5-flash',
         'gemini-2.0-flash-lite',
         'gemini-2.0-flash',
         'gemini-3.5-flash',
-        'gemini-2.5-flash',
         'gemini-2.5-pro'
     ]));
     const systemInstruction = `You are an AI assistant helping a student understand their self-reflection quiz results.

@@ -200,6 +200,7 @@ router.get('/me/results', jwt_1.authenticateJWT, (0, jwt_1.authorizeRoles)('STUD
                 title.includes('check-in') ||
                 category.includes('depression') ||
                 category.includes('clinical') ||
+                category.includes('self-check') ||
                 category.includes('wellbeing'));
         });
         const latestResult = screeningResults.length > 0 ? screeningResults[screeningResults.length - 1] : null;

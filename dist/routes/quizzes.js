@@ -173,7 +173,7 @@ router.post('/submit', jwt_1.authenticateJWT, (0, jwt_1.authorizeRoles)('STUDENT
         // Assign score threshold strings if not provided
         if (!classification && quiz) {
             classification = 'Minimal Depression';
-            const isPhq9 = quiz.title.toLowerCase().includes('phq-9') || quiz.category.toLowerCase().includes('clinical');
+            const isPhq9 = quiz.title.toLowerCase().includes('phq-9') || quiz.category.toLowerCase().includes('clinical') || quiz.category.toLowerCase().includes('self-check');
             if (isPhq9) {
                 if (quiz.maxScore === 15) {
                     if (overallScore >= 13) {

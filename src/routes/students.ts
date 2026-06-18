@@ -235,6 +235,7 @@ router.get(
           title.includes('check-in') ||
           category.includes('depression') ||
           category.includes('clinical') ||
+          category.includes('self-check') ||
           category.includes('wellbeing')
         );
       });

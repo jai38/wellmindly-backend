@@ -12,7 +12,7 @@ async function run() {
     try {
         console.log("Initializing model with systemInstruction...");
         const model = genAI.getGenerativeModel({
-            model: env_1.env.GEMINI_MODEL || 'gemini-3.5-flash',
+            model: 'gemini-2.5-flash',
             systemInstruction,
         });
         console.log("Starting chat session...");
