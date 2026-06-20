@@ -33,7 +33,8 @@ router.post('/google/callback', async (req, res) => {
             audience: env_1.env.GOOGLE_CLIENT_ID,
         });
     }
-    catch {
+    catch (err) {
+        console.error('Google ID token verification failed:', err);
         res.status(401).json({ error: 'Invalid or expired Google token' });
         return;
     }
