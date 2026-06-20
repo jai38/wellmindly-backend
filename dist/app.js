@@ -19,11 +19,14 @@ const app = (0, express_1.default)();
 app.use((0, helmet_1.default)());
 // Configure secure CORS policy checks
 const allowedOrigins = env_1.env.ALLOWED_ORIGINS.split(',');
+const mobileOrigins = ['http://localhost', 'capacitor://localhost'];
 app.use((0, cors_1.default)({
     origin: (origin, callback) => {
         if (!origin)
             return callback(null, true);
-        if (allowedOrigins.indexOf(origin) !== -1 || allowedOrigins.includes('*')) {
+        if (allowedOrigins.indexOf(origin) !== -1 ||
+            mobileOrigins.indexOf(origin) !== -1 ||
+            allowedOrigins.includes('*')) {
             return callback(null, true);
         }
         else {

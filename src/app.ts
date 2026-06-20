@@ -17,11 +17,17 @@ app.use(helmet());
 
 // Configure secure CORS policy checks
 const allowedOrigins = env.ALLOWED_ORIGINS.split(',');
+const mobileOrigins = ['http://localhost', 'capacitor://localhost'];
+
 app.use(
   cors({
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
-      if (allowedOrigins.indexOf(origin) !== -1 || allowedOrigins.includes('*')) {
+      if (
+        allowedOrigins.indexOf(origin) !== -1 ||
+        mobileOrigins.indexOf(origin) !== -1 ||
+        allowedOrigins.includes('*')
+      ) {
         return callback(null, true);
       } else {
         return callback(new Error('Not allowed by CORS'));
