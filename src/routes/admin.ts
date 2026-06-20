@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { authenticateJWT, authorizeRoles } from '../utils/jwt';
+import { parseStoredClassification } from '../utils/ai';
 
 const router = Router();
 
@@ -20,21 +21,40 @@ router.get(
       // 1. Total submission count across the entire system
       const totalSubmissions = await prisma.quizResult.count();
 
-      // 2. Group by classification — cross-sectional severity distribution
-      const classificationGroups = await prisma.quizResult.groupBy({
-        by: ['classification'],
-        _count: { id: true },
-        _avg: { overallScore: true },
-        _max: { overallScore: true },
-        _min: { overallScore: true },
+      // Fetch all quiz results for in-memory grouping
+      const allResultsForMetrics = await prisma.quizResult.findMany({
+        select: {
+          overallScore: true,
+          classification: true,
+          quizId: true,
+          completedAt: true,
+        }
       });
 
-      const classificationMetrics = classificationGroups.map((g) => ({
-        classification: g.classification,
-        count: g._count.id,
-        averageScore: g._avg.overallScore !== null ? Math.round(g._avg.overallScore) : 0,
-        maxScore: g._max.overallScore ?? 0,
-        minScore: g._min.overallScore ?? 0,
+      // 2. Group by classification in-memory after parsing JSON structures
+      const classificationMap: Record<string, { count: number; sumScore: number; maxScore: number; minScore: number }> = {};
+      
+      allResultsForMetrics.forEach(r => {
+        const parsed = parseStoredClassification(r.classification);
+        const name = parsed.classification || 'Completed';
+        
+        if (!classificationMap[name]) {
+          classificationMap[name] = { count: 0, sumScore: 0, maxScore: r.overallScore, minScore: r.overallScore };
+        }
+        
+        const group = classificationMap[name];
+        group.count++;
+        group.sumScore += r.overallScore;
+        if (r.overallScore > group.maxScore) group.maxScore = r.overallScore;
+        if (r.overallScore < group.minScore) group.minScore = r.overallScore;
+      });
+
+      const classificationMetrics = Object.entries(classificationMap).map(([name, data]) => ({
+        classification: name,
+        count: data.count,
+        averageScore: Math.round(data.sumScore / data.count),
+        maxScore: data.maxScore,
+        minScore: data.minScore
       }));
 
       // 3. Group by quiz — submissions per assessment type
@@ -65,20 +85,15 @@ router.get(
       }));
 
       // 4. Submission volume over time — daily counts for trend charts
-      const allResults = await prisma.quizResult.findMany({
-        select: { completedAt: true },
-        orderBy: { completedAt: 'asc' },
-      });
-
       const dailyVolume: Record<string, number> = {};
-      for (const r of allResults) {
+      for (const r of allResultsForMetrics) {
         const dayKey = r.completedAt.toISOString().slice(0, 10); // YYYY-MM-DD
         dailyVolume[dayKey] = (dailyVolume[dayKey] || 0) + 1;
       }
       const submissionTrend = Object.entries(dailyVolume).map(([date, count]) => ({
         date,
         count,
-      }));
+      })).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
       // 5. Total unique users who have submitted at least one quiz
       const uniqueUsers = await prisma.quizResult.groupBy({
@@ -95,6 +110,211 @@ router.get(
     } catch (error) {
       console.error('Error fetching admin metrics:', error);
       res.status(500).json({ error: 'Failed to fetch admin metrics' });
+    }
+  }
+);
+
+/**
+ * GET /api/admin/students
+ * Retrieves all students.
+ */
+router.get(
+  '/students',
+  authenticateJWT,
+  authorizeRoles('ADMIN'),
+  async (_req: Request, res: Response) => {
+    try {
+      const students = await prisma.user.findMany({
+        where: { role: 'STUDENT' },
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          createdAt: true,
+          university: {
+            select: {
+              name: true,
+              domain: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+      res.status(200).json({ students });
+    } catch (error) {
+      console.error('Error fetching students:', error);
+      res.status(500).json({ error: 'Failed to fetch students' });
+    }
+  }
+);
+
+/**
+ * GET /api/admin/students/:id
+ * Retrieves detailed student profile: checkins, chat messages, quiz results.
+ */
+router.get(
+  '/students/:id',
+  authenticateJWT,
+  authorizeRoles('ADMIN'),
+  async (req: Request, res: Response) => {
+    try {
+      const studentId = req.params.id as string;
+      const student = await prisma.user.findFirst({
+        where: { id: studentId, role: 'STUDENT' },
+        include: {
+          university: {
+            select: {
+              name: true,
+              domain: true,
+              verified: true,
+            },
+          },
+          dailyCheckins: {
+            orderBy: { createdAt: 'desc' },
+          },
+          chatMessages: {
+            orderBy: { createdAt: 'asc' },
+          },
+          quizResults: {
+            include: {
+              quiz: {
+                select: {
+                  title: true,
+                  category: true,
+                  maxScore: true,
+                },
+              },
+              feedback: true,
+            },
+            orderBy: { completedAt: 'desc' },
+          },
+        },
+      });
+
+      if (!student) {
+        res.status(404).json({ error: 'Student not found' });
+        return;
+      }
+
+      res.status(200).json({ student });
+    } catch (error) {
+      console.error('Error fetching student details:', error);
+      res.status(500).json({ error: 'Failed to fetch student details' });
+    }
+  }
+);
+
+/**
+ * GET /api/admin/quizzes
+ * Retrieves all quizzes with questions and options.
+ */
+router.get(
+  '/quizzes',
+  authenticateJWT,
+  authorizeRoles('ADMIN'),
+  async (_req: Request, res: Response) => {
+    try {
+      const quizzes = await prisma.quiz.findMany({
+        include: {
+          questions: {
+            include: {
+              options: true,
+            },
+            orderBy: { index: 'asc' },
+          },
+        },
+        orderBy: { createdAt: 'asc' },
+      });
+      res.status(200).json({ quizzes });
+    } catch (error) {
+      console.error('Error fetching quizzes:', error);
+      res.status(500).json({ error: 'Failed to fetch quizzes' });
+    }
+  }
+);
+
+/**
+ * GET /api/admin/feedbacks
+ * Retrieves all submitted quiz feedbacks.
+ */
+router.get(
+  '/feedbacks',
+  authenticateJWT,
+  authorizeRoles('ADMIN'),
+  async (_req: Request, res: Response) => {
+    try {
+      const feedbacks = await prisma.quizFeedback.findMany({
+        include: {
+          result: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  email: true,
+                  firstName: true,
+                  lastName: true,
+                },
+              },
+              quiz: {
+                select: {
+                  title: true,
+                  category: true,
+                  maxScore: true,
+                },
+              },
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+      res.status(200).json({ feedbacks });
+    } catch (error) {
+      console.error('Error fetching feedbacks:', error);
+      res.status(500).json({ error: 'Failed to fetch feedbacks' });
+    }
+  }
+);
+
+/**
+ * GET /api/admin/quiz-results
+ * Retrieves all quiz results in the system, optionally filtered by quizId.
+ */
+router.get(
+  '/quiz-results',
+  authenticateJWT,
+  authorizeRoles('ADMIN'),
+  async (req: Request, res: Response) => {
+    try {
+      const quizId = req.query.quizId as string | undefined;
+      const where = quizId ? { quizId } : {};
+
+      const quizResults = await prisma.quizResult.findMany({
+        where,
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              firstName: true,
+              lastName: true,
+            },
+          },
+          quiz: {
+            select: {
+              title: true,
+              category: true,
+              maxScore: true,
+            },
+          },
+        },
+        orderBy: { completedAt: 'desc' },
+      });
+
+      res.status(200).json({ quizResults });
+    } catch (error) {
+      console.error('Error fetching quiz results:', error);
+      res.status(500).json({ error: 'Failed to fetch quiz results' });
     }
   }
 );
