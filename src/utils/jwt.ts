@@ -5,7 +5,7 @@ import { verifyToken, signToken, JwtPayload } from '../lib/jwt';
 export { signToken, verifyToken, JwtPayload };
 
 /**
- * Express middleware — validates the Bearer JWT in the Authorization header.
+ * Express middleware that validates the Bearer JWT in the Authorization header.
  *
  * On success:  populates req.user with { sub, email, role, universityId }
  *              and calls next().
@@ -49,7 +49,7 @@ export function authenticateJWT(
 }
 
 /**
- * Role-guard factory — use after authenticateJWT.
+ * Role-guard factory, used after authenticateJWT.
  *
  * Usage:
  *   router.delete('/admin/user/:id', authenticateJWT, authorizeRoles('ADMIN'), handler);

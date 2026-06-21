@@ -57,7 +57,7 @@ router.get(
         minScore: data.minScore
       }));
 
-      // 3. Group by quiz — submissions per assessment type
+      // 3. Group by quiz: submissions per assessment type
       const quizGroups = await prisma.quizResult.groupBy({
         by: ['quizId'],
         _count: { id: true },
@@ -84,7 +84,7 @@ router.get(
         averageScore: g._avg.overallScore !== null ? Math.round(g._avg.overallScore) : 0,
       }));
 
-      // 4. Submission volume over time — daily counts for trend charts
+      // 4. Submission volume over time: daily counts for trend charts
       const dailyVolume: Record<string, number> = {};
       for (const r of allResultsForMetrics) {
         const dayKey = r.completedAt.toISOString().slice(0, 10); // YYYY-MM-DD

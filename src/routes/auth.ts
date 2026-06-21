@@ -51,7 +51,7 @@ router.post('/google/callback', async (req: Request, res: Response) => {
     where: { domain },
   });
 
-  // 3. Upsert the user — create on first login, find on subsequent logins
+  // 3. Upsert the user: create on first login, find on subsequent logins
   const user = await prisma.user.upsert({
     where: { email },
     update: {

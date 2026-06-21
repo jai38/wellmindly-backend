@@ -90,7 +90,7 @@ router.get(
 
       const totalSubmissions = results.length;
 
-      // Compile cluster scoring averages (anonymous — no student identity exposed)
+      // Compile cluster scoring averages (anonymous: no student identity exposed)
       const clusterAverage = totalSubmissions > 0
         ? Math.round(results.reduce((sum, r) => sum + r.overallScore, 0) / totalSubmissions)
         : 0;
@@ -131,7 +131,7 @@ router.get(
         maxObservedScore: Math.max(...data.scores),
       }));
 
-      // Submission volume over time — daily counts for trend visualization
+      // Submission volume over time: daily counts for trend visualization
       const dailyVolume: Record<string, number> = {};
       for (const r of results) {
         const dayKey = r.completedAt.toISOString().slice(0, 10);
