@@ -42,13 +42,12 @@ async function generateQuizFeedback(quizTitle, category, overallScore, maxScore,
         return null;
     }
     const modelsToTry = Array.from(new Set([
-        'gemini-2.5-flash',
-        env_1.env.GEMINI_MODEL || 'gemini-2.5-flash',
-        'gemini-2.0-flash-lite',
-        'gemini-2.0-flash',
         'gemini-3.5-flash',
+        'gemini-2.5-flash',
+        'gemini-2.5-flash-lite',
+        env_1.env.GEMINI_MODEL || 'gemini-2.5-flash',
         'gemini-2.5-pro'
-    ]));
+    ])).filter(m => m && !m.toLowerCase().includes('2.0-'));
     const systemInstruction = `You are an AI assistant helping a student understand their self-reflection quiz results.
 Speak in the WellMindly brand voice:
 - Tone: A thoughtful older friend who actually gets it.

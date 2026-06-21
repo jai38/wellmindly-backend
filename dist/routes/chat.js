@@ -9,20 +9,20 @@ const ai_1 = require("../utils/ai");
 const env_1 = require("../config/env");
 const prisma_1 = __importDefault(require("../lib/prisma"));
 const router = (0, express_1.Router)();
-// Helper to determine daily limit based on the model in use to support 100 users daily
+// Helper to determine daily limit based on the model in use to support users within the $5 budget
 function getMaxRequestsForModel(modelName) {
     const name = modelName.toLowerCase();
-    if (name.includes('2.5-pro') || name.includes('pro')) {
-        return 10; // 1K limit / 100 users = 10
+    if (name.includes('3.5-flash')) {
+        return 500; // 500 requests per student daily (each request reduces context by 0.2%)
     }
-    if (name.includes('2.5-flash') || name.includes('3.5-flash')) {
-        return 100; // 10K limit / 100 users = 100
+    if (name.includes('2.5-flash-lite') || name.includes('lite')) {
+        return 1000; // 1000 requests per student daily (each request reduces context by 0.1%)
     }
-    if (name.includes('2.0-flash-lite') || name.includes('lite')) {
-        return 1000; // Unlimited daily limit -> high default safety limit per user
+    if (name.includes('2.5-flash') || name.includes('flash')) {
+        return 500; // 500 requests per student daily (each request reduces context by 0.2%)
     }
-    if (name.includes('2.0-flash')) {
-        return 1000; // Unlimited daily limit -> high default safety limit per user
+    if (name.includes('pro')) {
+        return 50; // 50 requests per student daily (each request reduces context by 2%)
     }
     if (name.includes('gemma')) {
         return 10;
@@ -56,13 +56,13 @@ Speak in the WellMindly brand voice:
   Provide a substantial response consisting of exactly two paragraphs, separated by a blank line:
   1. Paragraph 1 (Empathy & Actionable Suggestions): Validate their experience directly. Show presence and empathy (e.g., "I hear you", "I am with you", and reassure them that it is completely okay to feel this way). Then, offer gentle, practical, and functional advice with things they should try or do (e.g., "maybe you should try this", "maybe you should try that", putting the phone face down, closing eyes, letting go of a minor task).
   2. Paragraph 2 (Dialogue & Continuous Engagement): Keep the communication going. Ask a couple of open-ended, thoughtful questions to interlink the conversation, learn more about what they are going through, and help them get more insights about themselves.`;
-// Helper to get the primary model name (prioritizing cheap Flash models over Pro)
+// Helper to get the primary model name (prioritizing cheap, supported Flash models over Pro)
 function getPrimaryModelName() {
     const envModel = env_1.env.GEMINI_MODEL;
-    if (envModel && !envModel.toLowerCase().includes('pro')) {
+    if (envModel && !envModel.toLowerCase().includes('pro') && !envModel.toLowerCase().includes('2.0-')) {
         return envModel;
     }
-    return 'gemini-2.0-flash';
+    return 'gemini-2.5-flash';
 }
 // Get or initialize a session (Calculated dynamically per User)
 router.get('/session/:sessionId', jwt_1.authenticateJWT, (0, jwt_1.authorizeRoles)('STUDENT', 'ADMIN'), async (req, res) => {
@@ -147,14 +147,13 @@ router.post('/message', jwt_1.authenticateJWT, (0, jwt_1.authorizeRoles)('STUDEN
             const primaryModel = getPrimaryModelName();
             const modelsToTry = [
                 primaryModel,
-                'gemini-2.0-flash',
-                'gemini-2.0-flash-lite',
-                'gemini-2.5-flash',
                 'gemini-3.5-flash',
+                'gemini-2.5-flash',
+                'gemini-2.5-flash-lite',
                 env_1.env.GEMINI_MODEL || 'gemini-2.5-flash',
                 'gemini-2.5-pro'
             ];
-            const uniqueModelsToTry = Array.from(new Set(modelsToTry));
+            const uniqueModelsToTry = Array.from(new Set(modelsToTry.filter(m => m && !m.toLowerCase().includes('2.0-'))));
             let apiSuccess = false;
             let lastError = null;
             for (const modelName of uniqueModelsToTry) {
