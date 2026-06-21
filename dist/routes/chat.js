@@ -56,6 +56,14 @@ Speak in the WellMindly brand voice:
   Provide a substantial response consisting of exactly two paragraphs, separated by a blank line:
   1. Paragraph 1 (Empathy & Actionable Suggestions): Validate their experience directly. Show presence and empathy (e.g., "I hear you", "I am with you", and reassure them that it is completely okay to feel this way). Then, offer gentle, practical, and functional advice with things they should try or do (e.g., "maybe you should try this", "maybe you should try that", putting the phone face down, closing eyes, letting go of a minor task).
   2. Paragraph 2 (Dialogue & Continuous Engagement): Keep the communication going. Ask a couple of open-ended, thoughtful questions to interlink the conversation, learn more about what they are going through, and help them get more insights about themselves.`;
+// Helper to get the primary model name (prioritizing cheap Flash models over Pro)
+function getPrimaryModelName() {
+    const envModel = env_1.env.GEMINI_MODEL;
+    if (envModel && !envModel.toLowerCase().includes('pro')) {
+        return envModel;
+    }
+    return 'gemini-2.0-flash';
+}
 // Get or initialize a session (Calculated dynamically per User)
 router.get('/session/:sessionId', jwt_1.authenticateJWT, (0, jwt_1.authorizeRoles)('STUDENT', 'ADMIN'), async (req, res) => {
     try {
@@ -65,8 +73,8 @@ router.get('/session/:sessionId', jwt_1.authenticateJWT, (0, jwt_1.authorizeRole
             return;
         }
         const dailyRequestsUsed = await getDailyRequestsUsed(userId);
-        const modelName = env_1.env.GEMINI_MODEL || 'gemini-3.5-flash';
-        const maxRequests = getMaxRequestsForModel(modelName);
+        const primaryModel = getPrimaryModelName();
+        const maxRequests = getMaxRequestsForModel(primaryModel);
         const remainingPercent = Math.max(0, 100 - Math.round((dailyRequestsUsed / maxRequests) * 100));
         res.status(200).json({
             sessionId: req.params.sessionId,
@@ -93,8 +101,8 @@ router.post('/message', jwt_1.authenticateJWT, (0, jwt_1.authorizeRoles)('STUDEN
             res.status(400).json({ error: 'Session ID and message are required' });
             return;
         }
-        const modelName = env_1.env.GEMINI_MODEL || 'gemini-3.5-flash';
-        const maxRequests = getMaxRequestsForModel(modelName);
+        const primaryModel = getPrimaryModelName();
+        const maxRequests = getMaxRequestsForModel(primaryModel);
         const dailyRequestsUsed = await getDailyRequestsUsed(userId);
         let remainingPercent = Math.max(0, 100 - Math.round((dailyRequestsUsed / maxRequests) * 100));
         // If no capacity remaining, return static fallback
@@ -135,18 +143,21 @@ router.post('/message', jwt_1.authenticateJWT, (0, jwt_1.authorizeRoles)('STUDEN
             if (!genAI) {
                 throw new Error('Gemini API key is not configured');
             }
-            // Sequential fallback list
-            const modelsToTry = Array.from(new Set([
-                'gemini-2.5-flash',
-                env_1.env.GEMINI_MODEL || 'gemini-2.5-flash',
-                'gemini-2.0-flash-lite',
+            // Sequential fallback list prioritizing cheap, high-context Flash models
+            const primaryModel = getPrimaryModelName();
+            const modelsToTry = [
+                primaryModel,
                 'gemini-2.0-flash',
+                'gemini-2.0-flash-lite',
+                'gemini-2.5-flash',
                 'gemini-3.5-flash',
+                env_1.env.GEMINI_MODEL || 'gemini-2.5-flash',
                 'gemini-2.5-pro'
-            ]));
+            ];
+            const uniqueModelsToTry = Array.from(new Set(modelsToTry));
             let apiSuccess = false;
             let lastError = null;
-            for (const modelName of modelsToTry) {
+            for (const modelName of uniqueModelsToTry) {
                 try {
                     console.log(`[WriteMindly] Attempting chat response using model: ${modelName}`);
                     const model = genAI.getGenerativeModel({
