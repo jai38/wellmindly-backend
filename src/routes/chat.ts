@@ -97,6 +97,51 @@ router.get(
   }
 );
 
+// Diagnostic route to check live backend connectivity
+router.get('/diagnose', async (req: Request, res: Response) => {
+  const diagnostics: any = {
+    env: {
+      NODE_ENV: process.env.NODE_ENV,
+      PORT: env.PORT,
+      ALLOWED_ORIGINS: env.ALLOWED_ORIGINS,
+      GEMINI_API_KEY_DEFINED: !!env.GEMINI_API_KEY,
+      GEMINI_API_KEY_LENGTH: env.GEMINI_API_KEY?.length || 0,
+      GEMINI_MODEL: env.GEMINI_MODEL,
+    },
+    database: {
+      status: 'unknown',
+    },
+    gemini: {
+      status: 'unknown',
+    }
+  };
+
+  try {
+    const userCount = await prisma.user.count();
+    diagnostics.database = { status: 'success', userCount };
+  } catch (err: any) {
+    diagnostics.database = { status: 'failed', error: err.message || err };
+  }
+
+  try {
+    const genAI = getGeminiClient();
+    if (!genAI) {
+      diagnostics.gemini = { status: 'failed', error: 'Gemini client not initialized' };
+    } else {
+      const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
+      const result = await Promise.race([
+        model.generateContent('Hi'),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout after 5 seconds')), 5000))
+      ]) as any;
+      diagnostics.gemini = { status: 'success', text: result.response?.text() || 'no response text' };
+    }
+  } catch (err: any) {
+    diagnostics.gemini = { status: 'failed', error: err.message || err };
+  }
+
+  res.status(200).json(diagnostics);
+});
+
 // Process a message
 router.post(
   '/message',
