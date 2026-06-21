@@ -59,7 +59,7 @@ export async function generateQuizFeedback(
     'gemini-2.5-flash-lite',
     env.GEMINI_MODEL || 'gemini-2.5-flash',
     'gemini-2.5-pro'
-  ])).filter(m => m && !m.toLowerCase().includes('2.0-'));
+  ])).filter(m => m && !m.toLowerCase().includes('2.0-') && !m.toLowerCase().includes('gemma'));
 
   const systemInstruction = `You are an AI assistant helping a student understand their self-reflection quiz results.
 Speak in the WellMindly brand voice:
@@ -101,7 +101,10 @@ Provide personalized, brand-aligned feedback based on this result.`;
         systemInstruction,
       });
 
-      const result = await model.generateContent(prompt);
+      const result = await Promise.race([
+        model.generateContent(prompt),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Gemini API call timed out')), 8000))
+      ]) as any;
       const text = result.response.text();
       
       if (!text) {

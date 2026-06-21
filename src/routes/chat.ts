@@ -60,7 +60,12 @@ Speak in the WellMindly brand voice:
 // Helper to get the primary model name (prioritizing cheap, supported Flash models over Pro)
 function getPrimaryModelName(): string {
   const envModel = env.GEMINI_MODEL;
-  if (envModel && !envModel.toLowerCase().includes('pro') && !envModel.toLowerCase().includes('2.0-')) {
+  if (
+    envModel &&
+    !envModel.toLowerCase().includes('pro') &&
+    !envModel.toLowerCase().includes('2.0-') &&
+    !envModel.toLowerCase().includes('gemma')
+  ) {
     return envModel;
   }
   return 'gemini-2.5-flash';
@@ -224,7 +229,7 @@ router.post(
           env.GEMINI_MODEL || 'gemini-2.5-flash',
           'gemini-2.5-pro'
         ];
-        const uniqueModelsToTry = Array.from(new Set(modelsToTry.filter(m => m && !m.toLowerCase().includes('2.0-'))));
+        const uniqueModelsToTry = Array.from(new Set(modelsToTry.filter(m => m && !m.toLowerCase().includes('2.0-') && !m.toLowerCase().includes('gemma'))));
 
         let apiSuccess = false;
         let lastError: any = null;
@@ -247,7 +252,10 @@ router.post(
               history: geminiHistory,
             });
 
-            const result = await chat.sendMessage(message);
+            const result = await Promise.race([
+              chat.sendMessage(message),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('Gemini API call timed out')), 8000))
+            ]) as any;
             replyText = result.response.text();
             
             if (replyText) {
