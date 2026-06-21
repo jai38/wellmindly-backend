@@ -6,20 +6,20 @@ import prisma from '../lib/prisma';
 
 const router = Router();
 
-// Helper to determine daily limit based on the model in use to support users within the $5 budget
+// Helper to determine daily limit based on the model in use to support users within the $1.50 monthly budget
 function getMaxRequestsForModel(modelName: string): number {
   const name = modelName.toLowerCase();
   if (name.includes('3.5-flash')) {
-    return 500; // 500 requests per student daily (each request reduces context by 0.2%)
+    return 300; // 300 requests per student daily (restricts maximum monthly spend to ~$1.44 per student)
   }
   if (name.includes('2.5-flash-lite') || name.includes('lite')) {
-    return 1000; // 1000 requests per student daily (each request reduces context by 0.1%)
+    return 600; // 600 requests per student daily (restricts maximum monthly spend to ~$1.44 per student)
   }
   if (name.includes('2.5-flash') || name.includes('flash')) {
-    return 500; // 500 requests per student daily (each request reduces context by 0.2%)
+    return 300; // 300 requests per student daily (restricts maximum monthly spend to ~$1.44 per student)
   }
   if (name.includes('pro')) {
-    return 50; // 50 requests per student daily (each request reduces context by 2%)
+    return 15; // 15 requests per student daily (restricts maximum monthly spend to ~$1.21 per student)
   }
   if (name.includes('gemma')) {
     return 10;
