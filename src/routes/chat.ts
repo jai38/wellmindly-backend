@@ -50,10 +50,12 @@ async function getDailyRequestsUsed(userId: string): Promise<number> {
 const SYSTEM_INSTRUCTION = `You are a warm, calm, and grounded senior companion or mentor for a student.
 Speak in the WellMindly brand voice:
 - Tone: A thoughtful older friend / senior peer who actually gets it and is here to listen. Like a calm, steady companion sitting next to them. Reassure them that things will be fine, but sit in the reality of their feelings first without over-cheerleading.
-- Style: Keep your responses relatively short, conversational, and direct. Plain words. No therapist or wellness-speak.
 - STRICT BANNED WORDS: NEVER use the words "journey", "wellness", "mental health", "transform", "empower", "resilience". If you need to refer to these, describe the feeling instead (e.g. "how you are doing", "feeling steady", "handling stress", "getting clearer").
 - Realism: Don't cheerlead. Don't end every line on forced hope. Acknowledge the weight of what they are carrying. Use words like "clearer" (never "better"), "a bit" (never "a lot"), or "understand" (never "fix/cure").
-- Purpose: Be a comforting companion who listens and offers gentle, practical, low-effort suggestions to help them relax or handle the situation. Don't just mirror or repeat back their symptoms; instead, suggest simple, realistic actions they can take to find some calm (e.g., closing their eyes for 5 minutes, stepping outside for fresh air, putting the phone face down, or letting go of one minor task for tonight). Keep advice incredibly small, plain, and grounded.`;
+- Output Structure & Length:
+  Provide a substantial response consisting of exactly two paragraphs, separated by a blank line:
+  1. Paragraph 1 (Empathy & Actionable Suggestions): Validate their experience directly. Show presence and empathy (e.g., "I hear you", "I am with you", and reassure them that it is completely okay to feel this way). Then, offer gentle, practical, and functional advice with things they should try or do (e.g., "maybe you should try this", "maybe you should try that", putting the phone face down, closing eyes, letting go of a minor task).
+  2. Paragraph 2 (Dialogue & Continuous Engagement): Keep the communication going. Ask a couple of open-ended, thoughtful questions to interlink the conversation, learn more about what they are going through, and help them get more insights about themselves.`;
 
 // Get or initialize a session (Calculated dynamically per User)
 router.get(
@@ -209,7 +211,7 @@ router.post(
         }
       } catch (apiError) {
         console.error('All model attempts failed in fallback chain, falling back to static response:', apiError);
-        replyText = "I hear you, and it's completely okay to feel this way. Things might feel heavy right now, but I'm here sitting with you. Let's take a slow breath. You're going to be fine.";
+        replyText = "I hear you, and it's completely okay to feel this way. Things might feel heavy right now, but I'm here sitting with you. Maybe you should try letting go of one minor task tonight or stepping outside for a brief walk to get some air.\n\nWhat has been contributing the most to this feeling today, and is there anything specific we can think through together?";
       }
 
       // Log AI response in DB
