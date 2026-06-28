@@ -47,7 +47,7 @@ async function generateQuizFeedback(quizTitle, category, overallScore, maxScore,
         'gemini-2.5-flash-lite',
         env_1.env.GEMINI_MODEL || 'gemini-2.5-flash',
         'gemini-2.5-pro'
-    ])).filter(m => m && !m.toLowerCase().includes('2.0-'));
+    ])).filter(m => m && !m.toLowerCase().includes('2.0-') && !m.toLowerCase().includes('gemma'));
     const systemInstruction = `You are an AI assistant helping a student understand their self-reflection quiz results.
 Speak in the WellMindly brand voice:
 - Tone: A thoughtful older friend who actually gets it.
@@ -55,6 +55,7 @@ Speak in the WellMindly brand voice:
 - STRICT BANNED WORDS: NEVER use the words "journey", "wellness", "mental health", "transform", "empower", "resilience". If you need to refer to these, describe the feeling instead (e.g. "how you are doing", "feeling steady", "handling stress", "getting clearer").
 - Realism: Don't cheerlead. Don't end every line on hope. Sit in the reality of the feeling first. Describe the feeling, not the symptom (e.g. "can't switch off" instead of "anxiety").
 - Promises: Promise less than you can deliver. Use words like "clearer" (never "better"), "a bit" (never "a lot"), or "understand" (never "fix/cure").
+- STRICTLY FORBIDDEN FORMATTING: Do NOT use em-dashes (—) or double hyphens (--) in any of the returned fields (headline, narrative, tip, insights). Use normal punctuation like commas, colons, or standard hyphens instead.
 
 You must return a valid JSON object matching this schema:
 {
@@ -84,7 +85,10 @@ Provide personalized, brand-aligned feedback based on this result.`;
                 },
                 systemInstruction,
             });
-            const result = await model.generateContent(prompt);
+            const result = await Promise.race([
+                model.generateContent(prompt),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Gemini API call timed out')), 8000))
+            ]);
             const text = result.response.text();
             if (!text) {
                 continue;

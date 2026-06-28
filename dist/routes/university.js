@@ -79,7 +79,7 @@ router.get('/metrics', jwt_1.authenticateJWT, (0, jwt_1.authorizeRoles)('UNIVERS
             orderBy: { completedAt: 'asc' },
         });
         const totalSubmissions = results.length;
-        // Compile cluster scoring averages (anonymous — no student identity exposed)
+        // Compile cluster scoring averages (anonymous: no student identity exposed)
         const clusterAverage = totalSubmissions > 0
             ? Math.round(results.reduce((sum, r) => sum + r.overallScore, 0) / totalSubmissions)
             : 0;
@@ -116,7 +116,7 @@ router.get('/metrics', jwt_1.authenticateJWT, (0, jwt_1.authorizeRoles)('UNIVERS
             minScore: Math.min(...data.scores),
             maxObservedScore: Math.max(...data.scores),
         }));
-        // Submission volume over time — daily counts for trend visualization
+        // Submission volume over time: daily counts for trend visualization
         const dailyVolume = {};
         for (const r of results) {
             const dayKey = r.completedAt.toISOString().slice(0, 10);

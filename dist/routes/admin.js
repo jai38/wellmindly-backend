@@ -51,7 +51,7 @@ router.get('/metrics', jwt_1.authenticateJWT, (0, jwt_1.authorizeRoles)('ADMIN')
             maxScore: data.maxScore,
             minScore: data.minScore
         }));
-        // 3. Group by quiz — submissions per assessment type
+        // 3. Group by quiz: submissions per assessment type
         const quizGroups = await prisma_1.default.quizResult.groupBy({
             by: ['quizId'],
             _count: { id: true },
@@ -75,7 +75,7 @@ router.get('/metrics', jwt_1.authenticateJWT, (0, jwt_1.authorizeRoles)('ADMIN')
             totalSubmissions: g._count.id,
             averageScore: g._avg.overallScore !== null ? Math.round(g._avg.overallScore) : 0,
         }));
-        // 4. Submission volume over time — daily counts for trend charts
+        // 4. Submission volume over time: daily counts for trend charts
         const dailyVolume = {};
         for (const r of allResultsForMetrics) {
             const dayKey = r.completedAt.toISOString().slice(0, 10); // YYYY-MM-DD

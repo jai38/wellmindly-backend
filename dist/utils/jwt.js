@@ -7,7 +7,7 @@ const jwt_1 = require("../lib/jwt");
 Object.defineProperty(exports, "verifyToken", { enumerable: true, get: function () { return jwt_1.verifyToken; } });
 Object.defineProperty(exports, "signToken", { enumerable: true, get: function () { return jwt_1.signToken; } });
 /**
- * Express middleware — validates the Bearer JWT in the Authorization header.
+ * Express middleware that validates the Bearer JWT in the Authorization header.
  *
  * On success:  populates req.user with { sub, email, role, universityId }
  *              and calls next().
@@ -44,7 +44,7 @@ function authenticateJWT(req, res, next) {
     }
 }
 /**
- * Role-guard factory — use after authenticateJWT.
+ * Role-guard factory, used after authenticateJWT.
  *
  * Usage:
  *   router.delete('/admin/user/:id', authenticateJWT, authorizeRoles('ADMIN'), handler);

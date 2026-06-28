@@ -49,7 +49,7 @@ router.post('/google/callback', async (req, res) => {
     const university = await prisma_1.default.university.findUnique({
         where: { domain },
     });
-    // 3. Upsert the user — create on first login, find on subsequent logins
+    // 3. Upsert the user: create on first login, find on subsequent logins
     const user = await prisma_1.default.user.upsert({
         where: { email },
         update: {

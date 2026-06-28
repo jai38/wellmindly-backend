@@ -9,20 +9,20 @@ const ai_1 = require("../utils/ai");
 const env_1 = require("../config/env");
 const prisma_1 = __importDefault(require("../lib/prisma"));
 const router = (0, express_1.Router)();
-// Helper to determine daily limit based on the model in use to support users within the $5 budget
+// Helper to determine daily limit based on the model in use to support users within the $1.50 monthly budget
 function getMaxRequestsForModel(modelName) {
     const name = modelName.toLowerCase();
     if (name.includes('3.5-flash')) {
-        return 500; // 500 requests per student daily (each request reduces context by 0.2%)
+        return 300; // 300 requests per student daily (restricts maximum monthly spend to ~$1.44 per student)
     }
     if (name.includes('2.5-flash-lite') || name.includes('lite')) {
-        return 1000; // 1000 requests per student daily (each request reduces context by 0.1%)
+        return 600; // 600 requests per student daily (restricts maximum monthly spend to ~$1.44 per student)
     }
     if (name.includes('2.5-flash') || name.includes('flash')) {
-        return 500; // 500 requests per student daily (each request reduces context by 0.2%)
+        return 300; // 300 requests per student daily (restricts maximum monthly spend to ~$1.44 per student)
     }
     if (name.includes('pro')) {
-        return 50; // 50 requests per student daily (each request reduces context by 2%)
+        return 15; // 15 requests per student daily (restricts maximum monthly spend to ~$1.21 per student)
     }
     if (name.includes('gemma')) {
         return 10;
@@ -52,6 +52,7 @@ Speak in the WellMindly brand voice:
 - Tone: A thoughtful older friend / senior peer who actually gets it and is here to listen. Like a calm, steady companion sitting next to them. Reassure them that things will be fine, but sit in the reality of their feelings first without over-cheerleading.
 - STRICT BANNED WORDS: NEVER use the words "journey", "wellness", "mental health", "transform", "empower", "resilience". If you need to refer to these, describe the feeling instead (e.g. "how you are doing", "feeling steady", "handling stress", "getting clearer").
 - Realism: Don't cheerlead. Don't end every line on forced hope. Acknowledge the weight of what they are carrying. Use words like "clearer" (never "better"), "a bit" (never "a lot"), or "understand" (never "fix/cure").
+- STRICTLY FORBIDDEN FORMATTING: Do NOT use em-dashes (—) or double hyphens (--) in your response. Never use lists, bullet points, or bold key-term headers. Write only in natural, flowing paragraphs.
 - Output Structure & Length:
   Provide a substantial response consisting of exactly two paragraphs, separated by a blank line:
   1. Paragraph 1 (Empathy & Actionable Suggestions): Validate their experience directly. Show presence and empathy (e.g., "I hear you", "I am with you", and reassure them that it is completely okay to feel this way). Then, offer gentle, practical, and functional advice with things they should try or do (e.g., "maybe you should try this", "maybe you should try that", putting the phone face down, closing eyes, letting go of a minor task).
@@ -59,7 +60,10 @@ Speak in the WellMindly brand voice:
 // Helper to get the primary model name (prioritizing cheap, supported Flash models over Pro)
 function getPrimaryModelName() {
     const envModel = env_1.env.GEMINI_MODEL;
-    if (envModel && !envModel.toLowerCase().includes('pro') && !envModel.toLowerCase().includes('2.0-')) {
+    if (envModel &&
+        !envModel.toLowerCase().includes('pro') &&
+        !envModel.toLowerCase().includes('2.0-') &&
+        !envModel.toLowerCase().includes('gemma')) {
         return envModel;
     }
     return 'gemini-2.5-flash';
@@ -87,6 +91,50 @@ router.get('/session/:sessionId', jwt_1.authenticateJWT, (0, jwt_1.authorizeRole
         console.error('Error fetching session details:', err);
         res.status(500).json({ error: 'Failed to fetch session details' });
     }
+});
+// Diagnostic route to check live backend connectivity
+router.get('/diagnose', async (req, res) => {
+    const diagnostics = {
+        env: {
+            NODE_ENV: process.env.NODE_ENV,
+            PORT: env_1.env.PORT,
+            ALLOWED_ORIGINS: env_1.env.ALLOWED_ORIGINS,
+            GEMINI_API_KEY_DEFINED: !!env_1.env.GEMINI_API_KEY,
+            GEMINI_API_KEY_LENGTH: env_1.env.GEMINI_API_KEY?.length || 0,
+            GEMINI_MODEL: env_1.env.GEMINI_MODEL,
+        },
+        database: {
+            status: 'unknown',
+        },
+        gemini: {
+            status: 'unknown',
+        }
+    };
+    try {
+        const userCount = await prisma_1.default.user.count();
+        diagnostics.database = { status: 'success', userCount };
+    }
+    catch (err) {
+        diagnostics.database = { status: 'failed', error: err.message || err };
+    }
+    try {
+        const genAI = (0, ai_1.getGeminiClient)();
+        if (!genAI) {
+            diagnostics.gemini = { status: 'failed', error: 'Gemini client not initialized' };
+        }
+        else {
+            const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
+            const result = await Promise.race([
+                model.generateContent('Hi'),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout after 5 seconds')), 5000))
+            ]);
+            diagnostics.gemini = { status: 'success', text: result.response?.text() || 'no response text' };
+        }
+    }
+    catch (err) {
+        diagnostics.gemini = { status: 'failed', error: err.message || err };
+    }
+    res.status(200).json(diagnostics);
 });
 // Process a message
 router.post('/message', jwt_1.authenticateJWT, (0, jwt_1.authorizeRoles)('STUDENT', 'ADMIN'), async (req, res) => {
@@ -153,7 +201,7 @@ router.post('/message', jwt_1.authenticateJWT, (0, jwt_1.authorizeRoles)('STUDEN
                 env_1.env.GEMINI_MODEL || 'gemini-2.5-flash',
                 'gemini-2.5-pro'
             ];
-            const uniqueModelsToTry = Array.from(new Set(modelsToTry.filter(m => m && !m.toLowerCase().includes('2.0-'))));
+            const uniqueModelsToTry = Array.from(new Set(modelsToTry.filter(m => m && !m.toLowerCase().includes('2.0-') && !m.toLowerCase().includes('gemma'))));
             let apiSuccess = false;
             let lastError = null;
             for (const modelName of uniqueModelsToTry) {
@@ -171,7 +219,10 @@ router.post('/message', jwt_1.authenticateJWT, (0, jwt_1.authorizeRoles)('STUDEN
                     const chat = model.startChat({
                         history: geminiHistory,
                     });
-                    const result = await chat.sendMessage(message);
+                    const result = await Promise.race([
+                        chat.sendMessage(message),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('Gemini API call timed out')), 8000))
+                    ]);
                     replyText = result.response.text();
                     if (replyText) {
                         console.log(`[WriteMindly] ✅ Success! Response generated using model: ${modelName}`);
