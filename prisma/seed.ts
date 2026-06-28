@@ -285,63 +285,89 @@ function getMockClassification(quizTitle: string, score: number): string {
 async function main() {
   console.log('🌱 Starting seed...');
 
-  console.log('🧹 Cleaning existing database...');
-  await prisma.quizFeedback.deleteMany();
-  await prisma.quizResult.deleteMany();
-  await prisma.questionOption.deleteMany();
-  await prisma.question.deleteMany();
-  await prisma.quiz.deleteMany();
-  await prisma.chatMessage.deleteMany();
-  await prisma.dailyCheckin.deleteMany();
-  await prisma.user.deleteMany();
-  await prisma.university.deleteMany();
-  await prisma.crisisHotline.deleteMany();
+  // SAFETY: No deleteMany() cleanups to preserve existing student accounts, check-ins, feedbacks, and submissions!
 
-  // 1. Seed Quizzes
+  // 1. Seed Quizzes conditionally (Upsert-like checking)
   const seededQuizzes: Record<string, any> = {};
   for (const qDef of quizzesToSeed) {
-    const quiz = await prisma.quiz.create({
-      data: {
-        title: qDef.title,
-        description: qDef.description,
-        category: qDef.category,
-        totalQuestions: qDef.questions.length,
-        maxScore: qDef.maxScore
-      }
+    let quiz = await prisma.quiz.findFirst({
+      where: { title: qDef.title }
     });
-    seededQuizzes[qDef.title] = quiz;
 
-    for (let i = 0; i < qDef.questions.length; i++) {
-      const qText = qDef.questions[i].text;
-      await prisma.question.create({
+    if (!quiz) {
+      quiz = await prisma.quiz.create({
         data: {
-          quizId: quiz.id,
-          index: i,
-          text: qText,
-          type: "MULTIPLE_CHOICE",
-          options: {
-            create: qDef.options.map(opt => ({
-              label: opt.label,
-              points: opt.points
-            }))
-          }
+          title: qDef.title,
+          description: qDef.description,
+          category: qDef.category,
+          totalQuestions: qDef.questions.length,
+          maxScore: qDef.maxScore
         }
       });
+      console.log(`✅ Created Quiz: ${quiz.title}`);
+    } else {
+      quiz = await prisma.quiz.update({
+        where: { id: quiz.id },
+        data: {
+          description: qDef.description,
+          category: qDef.category,
+          totalQuestions: qDef.questions.length,
+          maxScore: qDef.maxScore
+        }
+      });
+      console.log(`✨ Updated Quiz: ${quiz.title}`);
     }
-    console.log(`✅ Quiz: ${quiz.title} (id: ${quiz.id}) with ${qDef.questions.length} questions.`);
+    seededQuizzes[qDef.title] = quiz;
+
+    // Sync Questions conditionally
+    for (let i = 0; i < qDef.questions.length; i++) {
+      const qText = qDef.questions[i].text;
+      let question = await prisma.question.findFirst({
+        where: { quizId: quiz.id, index: i }
+      });
+
+      if (!question) {
+        question = await prisma.question.create({
+          data: {
+            quizId: quiz.id,
+            index: i,
+            text: qText,
+            type: "MULTIPLE_CHOICE",
+            options: {
+              create: qDef.options.map(opt => ({
+                label: opt.label,
+                points: opt.points
+              }))
+            }
+          }
+        });
+      } else {
+        question = await prisma.question.update({
+          where: { id: question.id },
+          data: {
+            text: qText
+          }
+        });
+      }
+    }
   }
 
-  // 2. Create 1 mock university
-  const university = await prisma.university.create({
-    data: {
-      name: 'Wellmindly University',
-      domain: 'wellmindly.edu',
-      verified: true,
-    },
+  // 2. Create 1 mock university conditionally
+  let university = await prisma.university.findFirst({
+    where: { domain: 'wellmindly.edu' }
   });
+  if (!university) {
+    university = await prisma.university.create({
+      data: {
+        name: 'Wellmindly University',
+        domain: 'wellmindly.edu',
+        verified: true,
+      },
+    });
+  }
   console.log(`✅ University: ${university.name} (id: ${university.id})`);
 
-  // 3. Create 5 mock student accounts
+  // 3. Create 5 mock student accounts conditionally
   const students = [
     { firstName: 'Alice', lastName: 'Johnson', email: 'alice@wellmindly.edu' },
     { firstName: 'Bob', lastName: 'Smith', email: 'bob@wellmindly.edu' },
@@ -353,52 +379,72 @@ async function main() {
   const targetQuizzes = ["Emotional check-in", "Mood snapshot", "Mental load"];
 
   for (const s of students) {
-    const passwordHash = await bcrypt.hash('Password123!', SALT_ROUNDS);
-
-    const student = await prisma.user.create({
-      data: {
-        email: s.email,
-        passwordHash,
-        firstName: s.firstName,
-        lastName: s.lastName,
-        role: 'STUDENT',
-        universityId: university.id,
-      },
+    let student = await prisma.user.findUnique({
+      where: { email: s.email }
     });
-    console.log(`✅ Student: ${student.firstName} ${student.lastName} (id: ${student.id})`);
 
-    // 4. Generate random quiz result histories per student across the active quizzes
-    for (const qTitle of targetQuizzes) {
-      const targetQuiz = seededQuizzes[qTitle];
-      if (targetQuiz) {
-        const score = randomInt(Math.round(targetQuiz.maxScore * 0.4), targetQuiz.maxScore);
-        const classification = getMockClassification(qTitle, score);
-        
-        await prisma.quizResult.create({
-          data: {
-            userId: student.id,
-            quizId: targetQuiz.id,
-            overallScore: score,
-            classification,
-          },
-        });
+    if (!student) {
+      const passwordHash = await bcrypt.hash('Password123!', SALT_ROUNDS);
+      student = await prisma.user.create({
+        data: {
+          email: s.email,
+          passwordHash,
+          firstName: s.firstName,
+          lastName: s.lastName,
+          role: 'STUDENT',
+          universityId: university.id,
+        },
+      });
+      console.log(`✅ Seeded Student: ${student.firstName} ${student.lastName}`);
+
+      // 4. Generate random staggered quiz result histories only for newly-seeded students
+      for (const qTitle of targetQuizzes) {
+        const targetQuiz = seededQuizzes[qTitle];
+        if (targetQuiz) {
+          // Generate 3 entries per quiz staggered over 14 days
+          for (let dayAgo = 12; dayAgo >= 0; dayAgo -= 5) {
+            const score = randomInt(Math.round(targetQuiz.maxScore * 0.4), targetQuiz.maxScore);
+            const classification = getMockClassification(qTitle, score);
+            const completedAt = new Date();
+            completedAt.setDate(completedAt.getDate() - dayAgo - randomInt(0, 2));
+
+            await prisma.quizResult.create({
+              data: {
+                userId: student.id,
+                quizId: targetQuiz.id,
+                overallScore: score,
+                classification,
+                completedAt,
+              },
+            });
+          }
+        }
       }
+      console.log(`   📊 Created staggered mock quiz results for newly created student: ${student.firstName}`);
+    } else {
+      console.log(`ℹ️ Student ${student.firstName} ${student.lastName} already exists. Skipping results generation to preserve data.`);
     }
-    console.log(`   📊 Created mock quiz results for ${student.firstName}`);
   }
 
-  // 5. Create 1 admin account
-  const adminPasswordHash = await bcrypt.hash('AdminPass123!', SALT_ROUNDS);
-  const admin = await prisma.user.create({
-    data: {
-      email: 'admin@wellmindly.edu',
-      passwordHash: adminPasswordHash,
-      firstName: 'Super',
-      lastName: 'Admin',
-      role: 'ADMIN',
-    },
+  // 5. Create 1 admin account conditionally
+  let admin = await prisma.user.findUnique({
+    where: { email: 'admin@wellmindly.edu' }
   });
-  console.log(`✅ Admin: ${admin.firstName} ${admin.lastName} (id: ${admin.id})`);
+  if (!admin) {
+    const adminPasswordHash = await bcrypt.hash('AdminPass123!', SALT_ROUNDS);
+    admin = await prisma.user.create({
+      data: {
+        email: 'admin@wellmindly.edu',
+        passwordHash: adminPasswordHash,
+        firstName: 'Super',
+        lastName: 'Admin',
+        role: 'ADMIN',
+      },
+    });
+    console.log(`✅ Admin: ${admin.firstName} ${admin.lastName} (id: ${admin.id})`);
+  } else {
+    console.log(`ℹ️ Admin ${admin.firstName} already exists. Skipping.`);
+  }
 
   console.log('\n🎉 Seeding complete!');
 }
