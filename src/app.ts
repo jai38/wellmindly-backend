@@ -74,6 +74,8 @@ app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', message: 'API is healthy' });
 });
 
-app.listen(env.PORT, () => {
+app.listen(env.env_PORT || env.PORT, () => {
   console.log(`Server is running on port ${env.PORT}`);
 });
+
+export default app;
