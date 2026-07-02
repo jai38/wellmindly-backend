@@ -14,6 +14,7 @@ const students_1 = __importDefault(require("./routes/students"));
 const admin_1 = __importDefault(require("./routes/admin"));
 const university_1 = __importDefault(require("./routes/university"));
 const chat_1 = __importDefault(require("./routes/chat"));
+const contacts_1 = __importDefault(require("./routes/contacts"));
 const app = (0, express_1.default)();
 // Secure security headers
 app.use((0, helmet_1.default)());
@@ -63,9 +64,11 @@ app.use('/api/students', students_1.default);
 app.use('/api/admin', admin_1.default);
 app.use('/api/university', university_1.default);
 app.use('/api/chat', chat_1.default);
+app.use('/api/contacts', contacts_1.default);
 app.get('/health', (req, res) => {
     res.status(200).json({ status: 'ok', message: 'API is healthy' });
 });
-app.listen(env_1.env.PORT, () => {
+app.listen(process.env.PORT || env_1.env.PORT, () => {
     console.log(`Server is running on port ${env_1.env.PORT}`);
 });
+exports.default = app;

@@ -147,3 +147,41 @@ model CrisisHotline {
 
   @@index([category])
 }
+
+model ContactRequest {
+  id        String   @id @default(uuid())
+  name      String
+  email     String
+  subject   String?
+  message   String   @db.Text
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model UniversityOnboarding {
+  id             String   @id @default(uuid())
+  name           String
+  email          String
+  universityName String
+  role           String
+  phone          String?
+  message        String   @db.Text
+  createdAt      DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model CounselorOnboarding {
+  id          String   @id @default(uuid())
+  name        String
+  email       String
+  phone       String?
+  credentials String
+  experience  String   @db.Text
+  message     String   @db.Text
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+}
+

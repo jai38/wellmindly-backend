@@ -48,7 +48,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.NullsOrder = exports.QueryMode = exports.SortOrder = exports.CrisisHotlineScalarFieldEnum = exports.DailyCheckinScalarFieldEnum = exports.WaitlistScalarFieldEnum = exports.ChatMessageScalarFieldEnum = exports.QuizFeedbackScalarFieldEnum = exports.QuizResultScalarFieldEnum = exports.QuestionOptionScalarFieldEnum = exports.QuestionScalarFieldEnum = exports.QuizScalarFieldEnum = exports.UniversityScalarFieldEnum = exports.UserScalarFieldEnum = exports.TransactionIsolationLevel = exports.ModelName = exports.AnyNull = exports.JsonNull = exports.DbNull = exports.NullTypes = exports.Decimal = void 0;
+exports.NullsOrder = exports.QueryMode = exports.SortOrder = exports.CounselorOnboardingScalarFieldEnum = exports.UniversityOnboardingScalarFieldEnum = exports.ContactRequestScalarFieldEnum = exports.CrisisHotlineScalarFieldEnum = exports.DailyCheckinScalarFieldEnum = exports.WaitlistScalarFieldEnum = exports.ChatMessageScalarFieldEnum = exports.QuizFeedbackScalarFieldEnum = exports.QuizResultScalarFieldEnum = exports.QuestionOptionScalarFieldEnum = exports.QuestionScalarFieldEnum = exports.QuizScalarFieldEnum = exports.UniversityScalarFieldEnum = exports.UserScalarFieldEnum = exports.TransactionIsolationLevel = exports.ModelName = exports.AnyNull = exports.JsonNull = exports.DbNull = exports.NullTypes = exports.Decimal = void 0;
 const runtime = __importStar(require("@prisma/client/runtime/index-browser"));
 exports.Decimal = runtime.Decimal;
 exports.NullTypes = {
@@ -85,7 +85,10 @@ exports.ModelName = {
     ChatMessage: 'ChatMessage',
     Waitlist: 'Waitlist',
     DailyCheckin: 'DailyCheckin',
-    CrisisHotline: 'CrisisHotline'
+    CrisisHotline: 'CrisisHotline',
+    ContactRequest: 'ContactRequest',
+    UniversityOnboarding: 'UniversityOnboarding',
+    CounselorOnboarding: 'CounselorOnboarding'
 };
 /*
  * Enums
@@ -182,6 +185,34 @@ exports.CrisisHotlineScalarFieldEnum = {
     website: 'website',
     category: 'category',
     country: 'country',
+    createdAt: 'createdAt'
+};
+exports.ContactRequestScalarFieldEnum = {
+    id: 'id',
+    name: 'name',
+    email: 'email',
+    subject: 'subject',
+    message: 'message',
+    createdAt: 'createdAt'
+};
+exports.UniversityOnboardingScalarFieldEnum = {
+    id: 'id',
+    name: 'name',
+    email: 'email',
+    universityName: 'universityName',
+    role: 'role',
+    phone: 'phone',
+    message: 'message',
+    createdAt: 'createdAt'
+};
+exports.CounselorOnboardingScalarFieldEnum = {
+    id: 'id',
+    name: 'name',
+    email: 'email',
+    phone: 'phone',
+    credentials: 'credentials',
+    experience: 'experience',
+    message: 'message',
     createdAt: 'createdAt'
 };
 exports.SortOrder = {

@@ -9,6 +9,7 @@ import studentsRouter from './routes/students';
 import adminRouter from './routes/admin';
 import universityRouter from './routes/university';
 import chatRouter from './routes/chat';
+import contactsRouter from './routes/contacts';
 
 const app = express();
 
@@ -69,12 +70,13 @@ app.use('/api/students', studentsRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/university', universityRouter);
 app.use('/api/chat', chatRouter);
+app.use('/api/contacts', contactsRouter);
 
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', message: 'API is healthy' });
 });
 
-app.listen(env.env_PORT || env.PORT, () => {
+app.listen(process.env.PORT || env.PORT, () => {
   console.log(`Server is running on port ${env.PORT}`);
 });
 
