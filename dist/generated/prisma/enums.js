@@ -9,7 +9,7 @@
 * 🟢 You can import this file directly.
 */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.Sender = exports.Role = void 0;
+exports.ReactionType = exports.TalkStatus = exports.Sender = exports.Role = void 0;
 exports.Role = {
     STUDENT: 'STUDENT',
     ADMIN: 'ADMIN',
@@ -18,4 +18,15 @@ exports.Role = {
 exports.Sender = {
     USER: 'USER',
     AI: 'AI'
+};
+exports.TalkStatus = {
+    PENDING: 'PENDING',
+    APPROVED: 'APPROVED',
+    FLAGGED: 'FLAGGED',
+    REJECTED: 'REJECTED'
+};
+exports.ReactionType = {
+    SUPPORT: 'SUPPORT',
+    HUG: 'HUG',
+    METOO: 'METOO'
 };

@@ -446,6 +446,33 @@ async function main() {
     console.log(`ℹ️ Admin ${admin.firstName} already exists. Skipping.`);
   }
 
+  // 6. Seed TalkRooms conditionally
+  const defaultRooms = [
+    { name: "Academic Pressure", description: "Exam stress, grades, workload, and finding your rhythm." },
+    { name: "Social & Loneliness", description: "Making friends, feeling isolated, and fitting in." },
+    { name: "Stress & Overwhelm", description: "When everything piles up and it feels hard to catch your breath." },
+    { name: "General Reflection", description: "Quiet thoughts, late-night ponderings, and whatever is on your mind." }
+  ];
+
+  console.log('🌱 Seeding default TalkRooms...');
+  for (const rDef of defaultRooms) {
+    const existing = await prisma.talkRoom.findUnique({
+      where: { name: rDef.name }
+    });
+    if (!existing) {
+      await prisma.talkRoom.create({
+        data: {
+          name: rDef.name,
+          description: rDef.description,
+          isActive: true
+        }
+      });
+      console.log(`✅ Created TalkRoom: ${rDef.name}`);
+    } else {
+      console.log(`ℹ️ TalkRoom: ${rDef.name} already exists. Skipping.`);
+    }
+  }
+
   console.log('\n🎉 Seeding complete!');
 }
 

@@ -7,6 +7,7 @@ const express_1 = require("express");
 const prisma_1 = __importDefault(require("../lib/prisma"));
 const jwt_1 = require("../utils/jwt");
 const ai_1 = require("../utils/ai");
+const enums_1 = require("../generated/prisma/enums");
 const router = (0, express_1.Router)();
 /**
  * GET /api/admin/metrics
@@ -276,6 +277,206 @@ router.get('/quiz-results', jwt_1.authenticateJWT, (0, jwt_1.authorizeRoles)('AD
     catch (error) {
         console.error('Error fetching quiz results:', error);
         res.status(500).json({ error: 'Failed to fetch quiz results' });
+    }
+});
+/**
+ * GET /api/admin/talk/metrics
+ * Calculate AI tokens cost and moderation metrics.
+ */
+router.get('/talk/metrics', jwt_1.authenticateJWT, (0, jwt_1.authorizeRoles)('ADMIN'), async (_req, res) => {
+    try {
+        const notesTokens = await prisma_1.default.talkNote.aggregate({
+            _sum: { inputTokens: true, outputTokens: true }
+        });
+        const repliesTokens = await prisma_1.default.talkReply.aggregate({
+            _sum: { inputTokens: true, outputTokens: true }
+        });
+        const totalInput = (notesTokens._sum.inputTokens || 0) + (repliesTokens._sum.inputTokens || 0);
+        const totalOutput = (notesTokens._sum.outputTokens || 0) + (repliesTokens._sum.outputTokens || 0);
+        // Gemini 2.5 Flash pricing: $0.075 / 1M input, $0.30 / 1M output
+        const inputCost = (totalInput / 1000000) * 0.075;
+        const outputCost = (totalOutput / 1000000) * 0.30;
+        const totalCostUsd = Number((inputCost + outputCost).toFixed(5));
+        const totalNotes = await prisma_1.default.talkNote.count();
+        const totalReplies = await prisma_1.default.talkReply.count();
+        const flaggedNotes = await prisma_1.default.talkNote.count({
+            where: { status: { in: [enums_1.TalkStatus.FLAGGED, enums_1.TalkStatus.REJECTED] } }
+        });
+        const flaggedReplies = await prisma_1.default.talkReply.count({
+            where: { status: { in: [enums_1.TalkStatus.FLAGGED, enums_1.TalkStatus.REJECTED] } }
+        });
+        const totalRooms = await prisma_1.default.talkRoom.count();
+        res.status(200).json({
+            totalCostUsd,
+            totalInput,
+            totalOutput,
+            totalNotes,
+            totalReplies,
+            flaggedNotes,
+            flaggedReplies,
+            totalRooms
+        });
+    }
+    catch (error) {
+        console.error('Error fetching talk metrics:', error);
+        res.status(500).json({ error: 'Failed to fetch talk metrics' });
+    }
+});
+/**
+ * GET /api/admin/talk/rooms
+ * List all talk rooms.
+ */
+router.get('/talk/rooms', jwt_1.authenticateJWT, (0, jwt_1.authorizeRoles)('ADMIN'), async (_req, res) => {
+    try {
+        const rooms = await prisma_1.default.talkRoom.findMany({
+            include: {
+                _count: { select: { notes: true } }
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+        res.status(200).json({ rooms });
+    }
+    catch (error) {
+        console.error('Error fetching talk rooms:', error);
+        res.status(500).json({ error: 'Failed to fetch talk rooms' });
+    }
+});
+/**
+ * POST /api/admin/talk/rooms
+ * Create a new talk room.
+ */
+router.post('/talk/rooms', jwt_1.authenticateJWT, (0, jwt_1.authorizeRoles)('ADMIN'), async (req, res) => {
+    try {
+        const { name, description } = (req.body || {});
+        if (!name || name.trim().length === 0) {
+            res.status(400).json({ error: 'Room name is required' });
+            return;
+        }
+        const room = await prisma_1.default.talkRoom.create({
+            data: {
+                name: name.trim(),
+                description: description?.trim()
+            }
+        });
+        res.status(201).json({ room });
+    }
+    catch (error) {
+        console.error('Error creating talk room:', error);
+        res.status(500).json({ error: 'Failed to create talk room' });
+    }
+});
+/**
+ * PUT /api/admin/talk/rooms/:roomId
+ * Toggle isActive state.
+ */
+router.put('/talk/rooms/:roomId', jwt_1.authenticateJWT, (0, jwt_1.authorizeRoles)('ADMIN'), async (req, res) => {
+    try {
+        const { isActive } = (req.body || {});
+        const room = await prisma_1.default.talkRoom.update({
+            where: { id: req.params.roomId },
+            data: { isActive: !!isActive }
+        });
+        res.status(200).json({ room });
+    }
+    catch (error) {
+        console.error('Error updating talk room:', error);
+        res.status(500).json({ error: 'Failed to update talk room' });
+    }
+});
+/**
+ * DELETE /api/admin/talk/rooms/:roomId
+ * Delete a talk room.
+ */
+router.delete('/talk/rooms/:roomId', jwt_1.authenticateJWT, (0, jwt_1.authorizeRoles)('ADMIN'), async (req, res) => {
+    try {
+        await prisma_1.default.talkRoom.delete({
+            where: { id: req.params.roomId }
+        });
+        res.status(200).json({ success: true });
+    }
+    catch (error) {
+        console.error('Error deleting talk room:', error);
+        res.status(500).json({ error: 'Failed to delete talk room' });
+    }
+});
+/**
+ * GET /api/admin/talk/flagged
+ * Retrieve flagged notes and replies.
+ */
+router.get('/talk/flagged', jwt_1.authenticateJWT, (0, jwt_1.authorizeRoles)('ADMIN'), async (_req, res) => {
+    try {
+        const flaggedNotes = await prisma_1.default.talkNote.findMany({
+            where: { status: { in: [enums_1.TalkStatus.FLAGGED, enums_1.TalkStatus.REJECTED] } },
+            include: { room: true },
+            orderBy: { createdAt: 'desc' }
+        });
+        const flaggedReplies = await prisma_1.default.talkReply.findMany({
+            where: { status: { in: [enums_1.TalkStatus.FLAGGED, enums_1.TalkStatus.REJECTED] } },
+            include: { note: { include: { room: true } } },
+            orderBy: { createdAt: 'desc' }
+        });
+        res.status(200).json({ flaggedNotes, flaggedReplies });
+    }
+    catch (error) {
+        console.error('Error fetching flagged content:', error);
+        res.status(500).json({ error: 'Failed to fetch flagged content' });
+    }
+});
+/**
+ * POST /api/admin/talk/flagged/:type/:id/resolve
+ * Resolve action for flagged content.
+ */
+router.post('/talk/flagged/:type/:id/resolve', jwt_1.authenticateJWT, (0, jwt_1.authorizeRoles)('ADMIN'), async (req, res) => {
+    try {
+        const { type, id } = req.params;
+        const { action } = (req.body || {});
+        if (!['APPROVE', 'REJECT', 'DELETE'].includes(action)) {
+            res.status(400).json({ error: 'Invalid resolution action' });
+            return;
+        }
+        if (type === 'note') {
+            if (action === 'APPROVE') {
+                await prisma_1.default.talkNote.update({
+                    where: { id },
+                    data: { status: enums_1.TalkStatus.APPROVED, moderationReason: null }
+                });
+            }
+            else if (action === 'REJECT') {
+                await prisma_1.default.talkNote.update({
+                    where: { id },
+                    data: { status: enums_1.TalkStatus.REJECTED }
+                });
+            }
+            else if (action === 'DELETE') {
+                await prisma_1.default.talkNote.delete({ where: { id } });
+            }
+        }
+        else if (type === 'reply') {
+            if (action === 'APPROVE') {
+                await prisma_1.default.talkReply.update({
+                    where: { id },
+                    data: { status: enums_1.TalkStatus.APPROVED, moderationReason: null }
+                });
+            }
+            else if (action === 'REJECT') {
+                await prisma_1.default.talkReply.update({
+                    where: { id },
+                    data: { status: enums_1.TalkStatus.REJECTED }
+                });
+            }
+            else if (action === 'DELETE') {
+                await prisma_1.default.talkReply.delete({ where: { id } });
+            }
+        }
+        else {
+            res.status(400).json({ error: 'Invalid content type' });
+            return;
+        }
+        res.status(200).json({ success: true });
+    }
+    catch (error) {
+        console.error('Error resolving flagged content:', error);
+        res.status(500).json({ error: 'Failed to resolve flagged content' });
     }
 });
 exports.default = router;

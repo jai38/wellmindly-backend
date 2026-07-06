@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { authenticateJWT, authorizeRoles } from '../utils/jwt';
 import { parseStoredClassification } from '../utils/ai';
+import { TalkStatus } from '../generated/prisma/enums';
 
 const router = Router();
 
@@ -315,6 +316,245 @@ router.get(
     } catch (error) {
       console.error('Error fetching quiz results:', error);
       res.status(500).json({ error: 'Failed to fetch quiz results' });
+    }
+  }
+);
+
+/**
+ * GET /api/admin/talk/metrics
+ * Calculate AI tokens cost and moderation metrics.
+ */
+router.get(
+  '/talk/metrics',
+  authenticateJWT,
+  authorizeRoles('ADMIN'),
+  async (_req: Request, res: Response) => {
+    try {
+      const notesTokens = await prisma.talkNote.aggregate({
+        _sum: { inputTokens: true, outputTokens: true }
+      });
+      const repliesTokens = await prisma.talkReply.aggregate({
+        _sum: { inputTokens: true, outputTokens: true }
+      });
+
+      const totalInput = (notesTokens._sum.inputTokens || 0) + (repliesTokens._sum.inputTokens || 0);
+      const totalOutput = (notesTokens._sum.outputTokens || 0) + (repliesTokens._sum.outputTokens || 0);
+
+      // Gemini 2.5 Flash pricing: $0.075 / 1M input, $0.30 / 1M output
+      const inputCost = (totalInput / 1000000) * 0.075;
+      const outputCost = (totalOutput / 1000000) * 0.30;
+      const totalCostUsd = Number((inputCost + outputCost).toFixed(5));
+
+      const totalNotes = await prisma.talkNote.count();
+      const totalReplies = await prisma.talkReply.count();
+      const flaggedNotes = await prisma.talkNote.count({
+        where: { status: { in: [TalkStatus.FLAGGED, TalkStatus.REJECTED] } }
+      });
+      const flaggedReplies = await prisma.talkReply.count({
+        where: { status: { in: [TalkStatus.FLAGGED, TalkStatus.REJECTED] } }
+      });
+      const totalRooms = await prisma.talkRoom.count();
+
+      res.status(200).json({
+        totalCostUsd,
+        totalInput,
+        totalOutput,
+        totalNotes,
+        totalReplies,
+        flaggedNotes,
+        flaggedReplies,
+        totalRooms
+      });
+    } catch (error) {
+      console.error('Error fetching talk metrics:', error);
+      res.status(500).json({ error: 'Failed to fetch talk metrics' });
+    }
+  }
+);
+
+/**
+ * GET /api/admin/talk/rooms
+ * List all talk rooms.
+ */
+router.get(
+  '/talk/rooms',
+  authenticateJWT,
+  authorizeRoles('ADMIN'),
+  async (_req: Request, res: Response) => {
+    try {
+      const rooms = await prisma.talkRoom.findMany({
+        include: {
+          _count: { select: { notes: true } }
+        },
+        orderBy: { createdAt: 'desc' }
+      });
+      res.status(200).json({ rooms });
+    } catch (error) {
+      console.error('Error fetching talk rooms:', error);
+      res.status(500).json({ error: 'Failed to fetch talk rooms' });
+    }
+  }
+);
+
+/**
+ * POST /api/admin/talk/rooms
+ * Create a new talk room.
+ */
+router.post(
+  '/talk/rooms',
+  authenticateJWT,
+  authorizeRoles('ADMIN'),
+  async (req: Request, res: Response) => {
+    try {
+      const { name, description } = (req.body || {}) as { name: string; description?: string };
+      if (!name || name.trim().length === 0) {
+        res.status(400).json({ error: 'Room name is required' });
+        return;
+      }
+
+      const room = await prisma.talkRoom.create({
+        data: {
+          name: name.trim(),
+          description: description?.trim()
+        }
+      });
+      res.status(201).json({ room });
+    } catch (error) {
+      console.error('Error creating talk room:', error);
+      res.status(500).json({ error: 'Failed to create talk room' });
+    }
+  }
+);
+
+/**
+ * PUT /api/admin/talk/rooms/:roomId
+ * Toggle isActive state.
+ */
+router.put(
+  '/talk/rooms/:roomId',
+  authenticateJWT,
+  authorizeRoles('ADMIN'),
+  async (req: Request, res: Response) => {
+    try {
+      const { isActive } = (req.body || {}) as { isActive: boolean };
+      const room = await prisma.talkRoom.update({
+        where: { id: req.params.roomId as string },
+        data: { isActive: !!isActive }
+      });
+      res.status(200).json({ room });
+    } catch (error) {
+      console.error('Error updating talk room:', error);
+      res.status(500).json({ error: 'Failed to update talk room' });
+    }
+  }
+);
+
+/**
+ * DELETE /api/admin/talk/rooms/:roomId
+ * Delete a talk room.
+ */
+router.delete(
+  '/talk/rooms/:roomId',
+  authenticateJWT,
+  authorizeRoles('ADMIN'),
+  async (req: Request, res: Response) => {
+    try {
+      await prisma.talkRoom.delete({
+        where: { id: req.params.roomId as string }
+      });
+      res.status(200).json({ success: true });
+    } catch (error) {
+      console.error('Error deleting talk room:', error);
+      res.status(500).json({ error: 'Failed to delete talk room' });
+    }
+  }
+);
+
+/**
+ * GET /api/admin/talk/flagged
+ * Retrieve flagged notes and replies.
+ */
+router.get(
+  '/talk/flagged',
+  authenticateJWT,
+  authorizeRoles('ADMIN'),
+  async (_req: Request, res: Response) => {
+    try {
+      const flaggedNotes = await prisma.talkNote.findMany({
+        where: { status: { in: [TalkStatus.FLAGGED, TalkStatus.REJECTED] } },
+        include: { room: true },
+        orderBy: { createdAt: 'desc' }
+      });
+
+      const flaggedReplies = await prisma.talkReply.findMany({
+        where: { status: { in: [TalkStatus.FLAGGED, TalkStatus.REJECTED] } },
+        include: { note: { include: { room: true } } },
+        orderBy: { createdAt: 'desc' }
+      });
+
+      res.status(200).json({ flaggedNotes, flaggedReplies });
+    } catch (error) {
+      console.error('Error fetching flagged content:', error);
+      res.status(500).json({ error: 'Failed to fetch flagged content' });
+    }
+  }
+);
+
+/**
+ * POST /api/admin/talk/flagged/:type/:id/resolve
+ * Resolve action for flagged content.
+ */
+router.post(
+  '/talk/flagged/:type/:id/resolve',
+  authenticateJWT,
+  authorizeRoles('ADMIN'),
+  async (req: Request, res: Response) => {
+    try {
+      const { type, id } = req.params as { type: 'note' | 'reply'; id: string };
+      const { action } = (req.body || {}) as { action: 'APPROVE' | 'REJECT' | 'DELETE' };
+
+      if (!['APPROVE', 'REJECT', 'DELETE'].includes(action)) {
+        res.status(400).json({ error: 'Invalid resolution action' });
+        return;
+      }
+
+      if (type === 'note') {
+        if (action === 'APPROVE') {
+          await prisma.talkNote.update({
+            where: { id },
+            data: { status: TalkStatus.APPROVED, moderationReason: null }
+          });
+        } else if (action === 'REJECT') {
+          await prisma.talkNote.update({
+            where: { id },
+            data: { status: TalkStatus.REJECTED }
+          });
+        } else if (action === 'DELETE') {
+          await prisma.talkNote.delete({ where: { id } });
+        }
+      } else if (type === 'reply') {
+        if (action === 'APPROVE') {
+          await prisma.talkReply.update({
+            where: { id },
+            data: { status: TalkStatus.APPROVED, moderationReason: null }
+          });
+        } else if (action === 'REJECT') {
+          await prisma.talkReply.update({
+            where: { id },
+            data: { status: TalkStatus.REJECTED }
+          });
+        } else if (action === 'DELETE') {
+          await prisma.talkReply.delete({ where: { id } });
+        }
+      } else {
+        res.status(400).json({ error: 'Invalid content type' });
+        return;
+      }
+
+      res.status(200).json({ success: true });
+    } catch (error) {
+      console.error('Error resolving flagged content:', error);
+      res.status(500).json({ error: 'Failed to resolve flagged content' });
     }
   }
 );

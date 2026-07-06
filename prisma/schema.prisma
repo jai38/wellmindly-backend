@@ -19,20 +19,28 @@ enum Role {
 }
 
 model User {
-  id           String   @id @default(uuid())
-  email        String   @unique
-  passwordHash String?
-  firstName    String
-  lastName     String
-  role         Role     @default(STUDENT)
-  googleId     String?  @unique
-  universityId String?
-  university   University? @relation(fields: [universityId], references: [id])
-  quizResults  QuizResult[]
-  chatMessages ChatMessage[]
-  dailyCheckins DailyCheckin[]
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                String   @id @default(uuid())
+  email             String   @unique
+  passwordHash      String?
+  firstName         String
+  lastName          String
+  role              Role     @default(STUDENT)
+  googleId          String?  @unique
+  universityId      String?
+  university        University? @relation(fields: [universityId], references: [id])
+  quizResults       QuizResult[]
+  chatMessages      ChatMessage[]
+  dailyCheckins     DailyCheckin[]
+  talkNotes         TalkNote[]
+  talkReplies       TalkReply[]
+  talkReactions     TalkReaction[]
+  talkReports       TalkReport[]
+  talkNickname      String?   @unique
+  talkAvatar        String?
+  talkBio           String?   @db.Text
+  talkTermsAccepted Boolean   @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }
 
 model University {
@@ -184,4 +192,99 @@ model CounselorOnboarding {
 
   @@index([createdAt])
 }
+
+enum TalkStatus {
+  PENDING
+  APPROVED
+  FLAGGED
+  REJECTED
+}
+
+enum ReactionType {
+  SUPPORT
+  HUG
+  METOO
+}
+
+model TalkRoom {
+  id          String     @id @default(uuid())
+  name        String     @unique
+  description String?    @db.Text
+  isActive    Boolean    @default(true)
+  notes       TalkNote[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+model TalkNote {
+  id           String         @id @default(uuid())
+  roomId       String
+  room         TalkRoom       @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  nickname     String
+  avatar       String
+  content      String         @db.Text
+  status       TalkStatus     @default(APPROVED)
+  meTooCount   Int            @default(0)
+  isReported   Boolean        @default(false)
+  aiScore      Float?
+  inputTokens      Int            @default(0)
+  outputTokens     Int            @default(0)
+  moderationReason String?        @db.Text
+  replies          TalkReply[]
+  reactions        TalkReaction[]
+  reports          TalkReport[]
+  createdAt        DateTime       @default(now())
+
+  @@index([roomId, status, createdAt])
+  @@index([userId, createdAt])
+}
+
+model TalkReply {
+  id           String       @id @default(uuid())
+  noteId       String
+  note         TalkNote     @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  nickname     String
+  avatar       String
+  content      String       @db.Text
+  status       TalkStatus   @default(APPROVED)
+  inputTokens      Int          @default(0)
+  outputTokens     Int          @default(0)
+  moderationReason String?      @db.Text
+  reports          TalkReport[]
+  createdAt        DateTime     @default(now())
+
+  @@index([noteId, status, createdAt])
+  @@index([userId, createdAt])
+}
+
+model TalkReaction {
+  id        String       @id @default(uuid())
+  noteId    String
+  note      TalkNote     @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      ReactionType
+  createdAt DateTime     @default(now())
+
+  @@unique([noteId, userId, type])
+}
+
+model TalkReport {
+  id        String     @id @default(uuid())
+  noteId    String?
+  note      TalkNote?  @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  replyId   String?
+  reply     TalkReply? @relation(fields: [replyId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reason    String?    @db.Text
+  createdAt DateTime   @default(now())
+
+  @@index([createdAt])
+}
+
 

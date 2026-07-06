@@ -48,7 +48,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.defineExtension = exports.NullsOrder = exports.QueryMode = exports.SortOrder = exports.CounselorOnboardingScalarFieldEnum = exports.UniversityOnboardingScalarFieldEnum = exports.ContactRequestScalarFieldEnum = exports.CrisisHotlineScalarFieldEnum = exports.DailyCheckinScalarFieldEnum = exports.WaitlistScalarFieldEnum = exports.ChatMessageScalarFieldEnum = exports.QuizFeedbackScalarFieldEnum = exports.QuizResultScalarFieldEnum = exports.QuestionOptionScalarFieldEnum = exports.QuestionScalarFieldEnum = exports.QuizScalarFieldEnum = exports.UniversityScalarFieldEnum = exports.UserScalarFieldEnum = exports.TransactionIsolationLevel = exports.ModelName = exports.AnyNull = exports.JsonNull = exports.DbNull = exports.NullTypes = exports.prismaVersion = exports.getExtensionContext = exports.Decimal = exports.Sql = exports.raw = exports.join = exports.empty = exports.sql = exports.PrismaClientValidationError = exports.PrismaClientInitializationError = exports.PrismaClientRustPanicError = exports.PrismaClientUnknownRequestError = exports.PrismaClientKnownRequestError = void 0;
+exports.defineExtension = exports.NullsOrder = exports.QueryMode = exports.SortOrder = exports.TalkReportScalarFieldEnum = exports.TalkReactionScalarFieldEnum = exports.TalkReplyScalarFieldEnum = exports.TalkNoteScalarFieldEnum = exports.TalkRoomScalarFieldEnum = exports.CounselorOnboardingScalarFieldEnum = exports.UniversityOnboardingScalarFieldEnum = exports.ContactRequestScalarFieldEnum = exports.CrisisHotlineScalarFieldEnum = exports.DailyCheckinScalarFieldEnum = exports.WaitlistScalarFieldEnum = exports.ChatMessageScalarFieldEnum = exports.QuizFeedbackScalarFieldEnum = exports.QuizResultScalarFieldEnum = exports.QuestionOptionScalarFieldEnum = exports.QuestionScalarFieldEnum = exports.QuizScalarFieldEnum = exports.UniversityScalarFieldEnum = exports.UserScalarFieldEnum = exports.TransactionIsolationLevel = exports.ModelName = exports.AnyNull = exports.JsonNull = exports.DbNull = exports.NullTypes = exports.prismaVersion = exports.getExtensionContext = exports.Decimal = exports.Sql = exports.raw = exports.join = exports.empty = exports.sql = exports.PrismaClientValidationError = exports.PrismaClientInitializationError = exports.PrismaClientRustPanicError = exports.PrismaClientUnknownRequestError = exports.PrismaClientKnownRequestError = void 0;
 const runtime = __importStar(require("@prisma/client/runtime/client"));
 /**
  * Prisma Errors
@@ -116,7 +116,12 @@ exports.ModelName = {
     CrisisHotline: 'CrisisHotline',
     ContactRequest: 'ContactRequest',
     UniversityOnboarding: 'UniversityOnboarding',
-    CounselorOnboarding: 'CounselorOnboarding'
+    CounselorOnboarding: 'CounselorOnboarding',
+    TalkRoom: 'TalkRoom',
+    TalkNote: 'TalkNote',
+    TalkReply: 'TalkReply',
+    TalkReaction: 'TalkReaction',
+    TalkReport: 'TalkReport'
 };
 /**
  * Enums
@@ -136,6 +141,10 @@ exports.UserScalarFieldEnum = {
     role: 'role',
     googleId: 'googleId',
     universityId: 'universityId',
+    talkNickname: 'talkNickname',
+    talkAvatar: 'talkAvatar',
+    talkBio: 'talkBio',
+    talkTermsAccepted: 'talkTermsAccepted',
     createdAt: 'createdAt',
     updatedAt: 'updatedAt'
 };
@@ -241,6 +250,58 @@ exports.CounselorOnboardingScalarFieldEnum = {
     credentials: 'credentials',
     experience: 'experience',
     message: 'message',
+    createdAt: 'createdAt'
+};
+exports.TalkRoomScalarFieldEnum = {
+    id: 'id',
+    name: 'name',
+    description: 'description',
+    isActive: 'isActive',
+    createdAt: 'createdAt',
+    updatedAt: 'updatedAt'
+};
+exports.TalkNoteScalarFieldEnum = {
+    id: 'id',
+    roomId: 'roomId',
+    userId: 'userId',
+    nickname: 'nickname',
+    avatar: 'avatar',
+    content: 'content',
+    status: 'status',
+    meTooCount: 'meTooCount',
+    isReported: 'isReported',
+    aiScore: 'aiScore',
+    inputTokens: 'inputTokens',
+    outputTokens: 'outputTokens',
+    moderationReason: 'moderationReason',
+    createdAt: 'createdAt'
+};
+exports.TalkReplyScalarFieldEnum = {
+    id: 'id',
+    noteId: 'noteId',
+    userId: 'userId',
+    nickname: 'nickname',
+    avatar: 'avatar',
+    content: 'content',
+    status: 'status',
+    inputTokens: 'inputTokens',
+    outputTokens: 'outputTokens',
+    moderationReason: 'moderationReason',
+    createdAt: 'createdAt'
+};
+exports.TalkReactionScalarFieldEnum = {
+    id: 'id',
+    noteId: 'noteId',
+    userId: 'userId',
+    type: 'type',
+    createdAt: 'createdAt'
+};
+exports.TalkReportScalarFieldEnum = {
+    id: 'id',
+    noteId: 'noteId',
+    replyId: 'replyId',
+    userId: 'userId',
+    reason: 'reason',
     createdAt: 'createdAt'
 };
 exports.SortOrder = {

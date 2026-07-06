@@ -10,6 +10,7 @@ import adminRouter from './routes/admin';
 import universityRouter from './routes/university';
 import chatRouter from './routes/chat';
 import contactsRouter from './routes/contacts';
+import talkRouter from './routes/talk';
 
 const app = express();
 
@@ -71,6 +72,7 @@ app.use('/api/admin', adminRouter);
 app.use('/api/university', universityRouter);
 app.use('/api/chat', chatRouter);
 app.use('/api/contacts', contactsRouter);
+app.use('/api/talk', talkRouter);
 
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', message: 'API is healthy' });

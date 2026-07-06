@@ -4,6 +4,8 @@ exports.getGeminiClient = getGeminiClient;
 exports.getGeminiChatSession = getGeminiChatSession;
 exports.generateQuizFeedback = generateQuizFeedback;
 exports.parseStoredClassification = parseStoredClassification;
+exports.classifyCrisisContent = classifyCrisisContent;
+exports.evaluateContentSafety = evaluateContentSafety;
 const generative_ai_1 = require("@google/generative-ai");
 const env_1 = require("../config/env");
 // Initialize the Gemini API client if API key is provided
@@ -130,4 +132,132 @@ function parseStoredClassification(val) {
         }
     }
     return { classification: val };
+}
+/**
+ * Classifies if a note or reply contains crisis safety concerns (self-harm, suicide, violence).
+ * Uses cheap, fast gemini-2.5-flash-lite and logs token costs.
+ */
+async function classifyCrisisContent(content) {
+    if (!genAI) {
+        console.log('Gemini API key is not configured. Safety classifier bypassed.');
+        return { isCrisis: false, inputTokens: 0, outputTokens: 0 };
+    }
+    const modelName = env_1.env.GEMINI_MODEL || 'gemini-2.5-flash-lite';
+    const systemInstruction = `You are an automated safety and crisis classifier for a student peer-support network.
+Analyze the student's anonymous post content for any signs of:
+- Suicidal ideation, intent, or planning
+- Self-harm (cutting, burning, mutilation)
+- Immediate threat of physical violence to self or others
+- Severe active crisis requiring safety routing
+
+Return a valid JSON object matching this schema:
+{
+  "isCrisis": boolean
+}
+Return true only if there is a real, active safety concern. Do not flag standard stress, study fatigue, or sadness unless it crosses into self-harm/suicidal expressions.`;
+    try {
+        const model = genAI.getGenerativeModel({
+            model: modelName,
+            generationConfig: {
+                responseMimeType: 'application/json',
+            },
+            systemInstruction,
+        });
+        const result = (await Promise.race([
+            model.generateContent(content),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Safety classifier timed out')), 5000))
+        ]));
+        const text = result.response.text();
+        if (!text) {
+            return { isCrisis: false, inputTokens: 0, outputTokens: 0 };
+        }
+        const parsed = JSON.parse(text);
+        const isCrisis = !!parsed.isCrisis;
+        let inputTokens = 0;
+        let outputTokens = 0;
+        if (result.response.usageMetadata) {
+            inputTokens = result.response.usageMetadata.promptTokenCount || 0;
+            outputTokens = result.response.usageMetadata.candidatesTokenCount || 0;
+        }
+        return { isCrisis, inputTokens, outputTokens };
+    }
+    catch (err) {
+        console.error('[safetyClassifier] ⚠️ Crisis classification failed, falling back to false:', err.message || err);
+        // On error/timeout, we fall back to false but log it. Human moderation priority queue will act as safety net
+        return { isCrisis: false, inputTokens: 0, outputTokens: 0 };
+    }
+}
+/**
+ * Asynchronously moderates a note or reply for crisis and safety.
+ * Evaluates:
+ * 1. Suicide/self-harm/violence (isCrisis)
+ * 2. Inappropriate/explicit/harassment content (isUnsafe)
+ * Returns a JSON structure:
+ * {
+ *   isSafe: boolean,
+ *   isCrisis: boolean,
+ *   reason?: string
+ * }
+ */
+async function evaluateContentSafety(content) {
+    if (!genAI) {
+        return { isSafe: true, isCrisis: false, reason: undefined, inputTokens: 0, outputTokens: 0 };
+    }
+    const modelName = env_1.env.GEMINI_MODEL || 'gemini-2.5-flash-lite';
+    const systemInstruction = `You are a safety monitoring agent for a university student peer-support network (TalkMindly).
+Analyze the post content for safety violations:
+- Suicidal ideation, intent, or planning (isCrisis)
+- Self-harm/mutilation (isCrisis)
+- Severe active crisis requiring safety intervention (isCrisis)
+- Bullying, hate speech, direct harassment, or sexual propositioning/explicit sexual comments (isUnsafe)
+- Obfuscated profanity or bypass attempts (e.g., using asterisks, symbols, or punctuation to hide bad words like "fu*k", "f**k", "s*ck", "sh!t") (isUnsafe)
+- Commercial advertisements, spam, or soliciting (isUnsafe)
+
+Return a valid JSON object matching this schema:
+{
+  "isSafe": boolean,
+  "isCrisis": boolean,
+  "reason": string // If isSafe is false or isCrisis is true, write a short, friendly, empathetic explanation of why the message was flagged. Max 8 words.
+}
+
+Examples:
+- "anyone wanna suck me" -> {"isSafe": false, "isCrisis": false, "reason": "Contains sexually explicit references"}
+- "fu*k me" -> {"isSafe": false, "isCrisis": false, "reason": "Contains profanity or bypass attempts"}
+- "I can't do this anymore, I'm going to end it tonight" -> {"isSafe": false, "isCrisis": true, "reason": "Mentions suicidal intent"}
+- "I hate my group mates they are so stupid" -> {"isSafe": true, "isCrisis": false}
+- "You are a disgusting fat cow" -> {"isSafe": false, "isCrisis": false, "reason": "Direct bullying and harassment"}
+
+Be fair. Sadness, study fatigue, venting stress, and academic pressure are allowed. Only flag actual harassment, explicit vulgarity, obfuscated profanity bypasses, or safety crisis.`;
+    try {
+        const model = genAI.getGenerativeModel({
+            model: modelName,
+            generationConfig: {
+                responseMimeType: 'application/json',
+            },
+            systemInstruction,
+        });
+        const result = (await Promise.race([
+            model.generateContent(content),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Safety evaluator timed out')), 6000))
+        ]));
+        const text = result.response.text();
+        if (!text) {
+            return { isSafe: true, isCrisis: false, inputTokens: 0, outputTokens: 0 };
+        }
+        const parsed = JSON.parse(text);
+        const isCrisis = parsed.isCrisis !== undefined ? !!parsed.isCrisis : (parsed.crisis !== undefined ? !!parsed.crisis : false);
+        const isSafe = parsed.isSafe !== undefined ? !!parsed.isSafe : (parsed.safe !== undefined ? !!parsed.safe : true);
+        const reason = parsed.reason || parsed.explanation || undefined;
+        let inputTokens = 0;
+        let outputTokens = 0;
+        if (result.response.usageMetadata) {
+            inputTokens = result.response.usageMetadata.promptTokenCount || 0;
+            outputTokens = result.response.usageMetadata.candidatesTokenCount || 0;
+        }
+        return { isSafe: isSafe && !isCrisis, isCrisis, reason, inputTokens, outputTokens };
+    }
+    catch (err) {
+        console.error('[safetyEvaluator] ⚠️ Evaluation failed, falling back to safe:', err.message || err);
+        return { isSafe: true, isCrisis: false, inputTokens: 0, outputTokens: 0 };
+    }
 }
