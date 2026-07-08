@@ -367,6 +367,20 @@ async function main() {
   }
   console.log(`✅ University: ${university.name} (id: ${university.id})`);
 
+  let universityCom = await prisma.university.findFirst({
+    where: { domain: 'wellmindly.com' }
+  });
+  if (!universityCom) {
+    universityCom = await prisma.university.create({
+      data: {
+        name: 'Wellmindly University Com',
+        domain: 'wellmindly.com',
+        verified: true,
+      },
+    });
+  }
+  console.log(`✅ University Com: ${universityCom.name} (id: ${universityCom.id})`);
+
   // 3. Create 5 mock student accounts conditionally
   const students = [
     { firstName: 'Alice', lastName: 'Johnson', email: 'alice@wellmindly.edu' },
@@ -465,6 +479,26 @@ async function main() {
     console.log(`✅ University Admin: ${universityUser.firstName} ${universityUser.lastName} (id: ${universityUser.id})`);
   } else {
     console.log(`ℹ️ University Admin ${universityUser.firstName} already exists. Skipping.`);
+  }
+
+  let universityUserCom = await prisma.user.findUnique({
+    where: { email: 'university@wellmindly.com' }
+  });
+  if (!universityUserCom) {
+    const uniPasswordHash = await bcrypt.hash('AdminPass123!', SALT_ROUNDS);
+    universityUserCom = await prisma.user.create({
+      data: {
+        email: 'university@wellmindly.com',
+        passwordHash: uniPasswordHash,
+        firstName: 'University',
+        lastName: 'Admin',
+        role: 'UNIVERSITY',
+        universityId: universityCom.id,
+      },
+    });
+    console.log(`✅ University Admin (Com): ${universityUserCom.firstName} ${universityUserCom.lastName} (id: ${universityUserCom.id})`);
+  } else {
+    console.log(`ℹ️ University Admin (Com) ${universityUserCom.firstName} already exists. Skipping.`);
   }
 
   // 6. Seed TalkRooms conditionally
