@@ -446,6 +446,27 @@ async function main() {
     console.log(`ℹ️ Admin ${admin.firstName} already exists. Skipping.`);
   }
 
+  // 5.5 Create 1 university staff account conditionally
+  let universityUser = await prisma.user.findUnique({
+    where: { email: 'university@wellmindly.edu' }
+  });
+  if (!universityUser) {
+    const uniPasswordHash = await bcrypt.hash('AdminPass123!', SALT_ROUNDS);
+    universityUser = await prisma.user.create({
+      data: {
+        email: 'university@wellmindly.edu',
+        passwordHash: uniPasswordHash,
+        firstName: 'University',
+        lastName: 'Admin',
+        role: 'UNIVERSITY',
+        universityId: university.id,
+      },
+    });
+    console.log(`✅ University Admin: ${universityUser.firstName} ${universityUser.lastName} (id: ${universityUser.id})`);
+  } else {
+    console.log(`ℹ️ University Admin ${universityUser.firstName} already exists. Skipping.`);
+  }
+
   // 6. Seed TalkRooms conditionally
   const defaultRooms = [
     { name: "Academic Pressure", description: "Exam stress, grades, workload, and finding your rhythm." },
