@@ -20,6 +20,36 @@ const transporter = hasSmtpConfig
     })
     : null;
 async function sendEmail({ to, subject, html }) {
+    // 1. Try Resend API if configured
+    if (env_1.env.RESEND_API_KEY) {
+        try {
+            const response = await fetch('https://api.resend.com/emails', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${env_1.env.RESEND_API_KEY}`,
+                },
+                body: JSON.stringify({
+                    from: env_1.env.SMTP_FROM || 'WellMindly <onboarding@resend.dev>',
+                    to: [to],
+                    subject,
+                    html,
+                }),
+            });
+            const data = await response.json();
+            if (response.ok) {
+                console.log(`✉️ Email sent to ${to} via Resend API (id: ${data?.id})`);
+                return;
+            }
+            else {
+                console.error(`❌ Resend API error sending email to ${to}:`, data);
+            }
+        }
+        catch (resendErr) {
+            console.error(`❌ Failed to send email via Resend API to ${to}:`, resendErr);
+        }
+    }
+    // 2. Try SMTP Transporter (SendGrid, Brevo, AWS SES, Postmark, Gmail)
     if (transporter) {
         try {
             await transporter.sendMail({
@@ -29,15 +59,16 @@ async function sendEmail({ to, subject, html }) {
                 html,
             });
             console.log(`✉️ Email sent to ${to} via SMTP`);
+            return;
         }
         catch (err) {
             console.error(`❌ Failed to send email via SMTP to ${to}:`, err);
             logToConsoleFallback(to, subject, html);
+            return;
         }
     }
-    else {
-        logToConsoleFallback(to, subject, html);
-    }
+    // 3. Fallback to console log if no provider succeeded
+    logToConsoleFallback(to, subject, html);
 }
 function logToConsoleFallback(to, subject, html) {
     // Pull code out of HTML template if possible
