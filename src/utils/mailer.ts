@@ -15,13 +15,13 @@ const transporter = hasSmtpConfig
     })
   : null;
 
-interface SendEmailOptions {
+export interface EmailOptions {
   to: string;
   subject: string;
   html: string;
 }
 
-export async function sendEmail({ to, subject, html }: SendEmailOptions) {
+export async function sendEmail({ to, subject, html }: EmailOptions) {
   if (transporter) {
     try {
       await transporter.sendMail({

@@ -44,22 +44,22 @@ async function main() {
     console.log(`✅ Quiz: ${phq9.title} (id: ${phq9.id})`);
     // 2. Create 1 mock university
     const university = await prisma.university.upsert({
-        where: { domain: 'wellmindly.edu' },
+        where: { domain: 'wellmindly.com' },
         update: {},
         create: {
             name: 'Wellmindly University',
-            domain: 'wellmindly.edu',
+            domain: 'wellmindly.com',
             verified: true,
         },
     });
     console.log(`✅ University: ${university.name} (id: ${university.id})`);
     // 3. Create 5 mock student accounts
     const students = [
-        { firstName: 'Alice', lastName: 'Johnson', email: 'alice@wellmindly.edu' },
-        { firstName: 'Bob', lastName: 'Smith', email: 'bob@wellmindly.edu' },
-        { firstName: 'Carol', lastName: 'Williams', email: 'carol@wellmindly.edu' },
-        { firstName: 'David', lastName: 'Brown', email: 'david@wellmindly.edu' },
-        { firstName: 'Eva', lastName: 'Davis', email: 'eva@wellmindly.edu' },
+        { firstName: 'Alice', lastName: 'Johnson', email: 'alice@wellmindly.com' },
+        { firstName: 'Bob', lastName: 'Smith', email: 'bob@wellmindly.com' },
+        { firstName: 'Carol', lastName: 'Williams', email: 'carol@wellmindly.com' },
+        { firstName: 'David', lastName: 'Brown', email: 'david@wellmindly.com' },
+        { firstName: 'Eva', lastName: 'Davis', email: 'eva@wellmindly.com' },
     ];
     for (const s of students) {
         const passwordHash = await bcrypt_1.default.hash('Password123!', SALT_ROUNDS);
@@ -94,10 +94,10 @@ async function main() {
     // 5. Create 1 admin account
     const adminPasswordHash = await bcrypt_1.default.hash('AdminPass123!', SALT_ROUNDS);
     const admin = await prisma.user.upsert({
-        where: { email: 'admin@wellmindly.edu' },
+        where: { email: 'admin@wellmindly.com' },
         update: {},
         create: {
-            email: 'admin@wellmindly.edu',
+            email: 'admin@wellmindly.com',
             passwordHash: adminPasswordHash,
             firstName: 'Super',
             lastName: 'Admin',

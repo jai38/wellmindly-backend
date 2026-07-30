@@ -15,7 +15,29 @@ datasource db {
 enum Role {
   STUDENT
   ADMIN
+  SUPER_ADMIN
   UNIVERSITY
+  COUNSELOR
+}
+
+enum CounselorStatus {
+  INVITED
+  PROFILE_PENDING
+  UNDER_REVIEW
+  ACTIVE
+  SUSPENDED
+  INACTIVE
+}
+
+enum SessionStatus {
+  PENDING
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  NO_SHOW
+  CANCELLED_BY_STUDENT
+  CANCELLED_BY_COUNSELOR
+  EXPIRED
 }
 
 model User {
@@ -25,6 +47,8 @@ model User {
   firstName         String
   lastName          String
   role              Role     @default(STUDENT)
+  timezone          String   @default("UTC")
+  deletedAt         DateTime?
   googleId          String?  @unique
   universityId      String?
   university        University? @relation(fields: [universityId], references: [id])
@@ -39,6 +63,10 @@ model User {
   talkAvatar        String?
   talkBio           String?   @db.Text
   talkTermsAccepted Boolean   @default(false)
+  counselorProfile  CounselorProfile?
+  studentSessions   CounselorSession[] @relation("StudentSessions")
+  auditLogs         AuditLog[] @relation("ActorAuditLogs")
+  notifications     Notification[]
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 }
@@ -285,6 +313,169 @@ model TalkReport {
   createdAt DateTime   @default(now())
 
   @@index([createdAt])
+}
+
+model CounselorProfile {
+  id                    String            @id @default(uuid())
+  userId                String            @unique
+  user                  User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  specializations       String[]
+  credentials           String
+  bio                   String?           @db.Text
+  avatarUrl             String?
+  phone                 String?
+  status                CounselorStatus   @default(INVITED)
+  version               Int               @default(1)
+  deletedAt             DateTime?
+  availabilities        CounselorAvailability[]
+  exceptions            CounselorAvailabilityException[]
+  sessions              CounselorSession[] @relation("CounselorSessions")
+  notes                 SessionNote[]
+  receivedFeedback      StudentFeedback[]
+  givenFeedback         CounselorFeedback[]
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  @@index([status])
+}
+
+model CounselorAvailability {
+  id                 String           @id @default(uuid())
+  counselorId        String
+  counselor          CounselorProfile @relation(fields: [counselorId], references: [id], onDelete: Cascade)
+  dayOfWeek          Int              // 0 = Sunday, 6 = Saturday
+  startTime          String           // "09:00"
+  endTime            String           // "17:00"
+  slotDurationMins   Int              @default(45)
+  isAvailable        Boolean          @default(true)
+  createdAt          DateTime         @default(now())
+
+  @@index([counselorId, dayOfWeek])
+}
+
+model CounselorAvailabilityException {
+  id                 String           @id @default(uuid())
+  counselorId        String
+  counselor          CounselorProfile @relation(fields: [counselorId], references: [id], onDelete: Cascade)
+  startDate          DateTime
+  endDate            DateTime
+  isFullDay          Boolean          @default(true)
+  reason             String?
+  createdAt          DateTime         @default(now())
+
+  @@index([counselorId, startDate, endDate])
+}
+
+model CounselorSession {
+  id                 String           @id @default(uuid())
+  counselorId        String
+  counselor          CounselorProfile @relation("CounselorSessions", fields: [counselorId], references: [id])
+  studentId          String
+  student            User             @relation("StudentSessions", fields: [studentId], references: [id])
+  startTime          DateTime
+  endTime            DateTime
+  status             SessionStatus    @default(CONFIRMED)
+  meetingLink        String
+  cancellationReason String?
+  version            Int              @default(1)
+  deletedAt          DateTime?
+  notes              SessionNote[]
+  studentFeedback    StudentFeedback?
+  counselorFeedback  CounselorFeedback?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  @@index([counselorId, startTime])
+  @@index([studentId, startTime])
+  @@index([status])
+}
+
+model SessionNote {
+  id                 String           @id @default(uuid())
+  sessionId          String
+  session            CounselorSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  counselorId        String
+  counselor          CounselorProfile @relation(fields: [counselorId], references: [id])
+  studentId          String
+  title              String
+  content            String           @db.Text
+  isPrivate          Boolean          @default(true)
+  isDraft            Boolean          @default(false)
+  deletedAt          DateTime?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  @@index([sessionId])
+  @@index([counselorId, studentId])
+}
+
+model StudentFeedback {
+  id                 String           @id @default(uuid())
+  sessionId          String           @unique
+  session            CounselorSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  counselorId        String
+  counselor          CounselorProfile @relation(fields: [counselorId], references: [id])
+  studentId          String
+  rating             Int
+  comments           String?          @db.Text
+  answers            Json?
+  deletedAt          DateTime?
+  createdAt          DateTime         @default(now())
+
+  @@index([counselorId, rating])
+}
+
+model CounselorFeedback {
+  id                 String           @id @default(uuid())
+  sessionId          String           @unique
+  session            CounselorSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  counselorId        String
+  counselor          CounselorProfile @relation(fields: [counselorId], references: [id])
+  studentId          String
+  rating             Int
+  summaryNote        String           @db.Text
+  answers            Json?
+  createdAt          DateTime         @default(now())
+
+  @@index([counselorId])
+}
+
+model CounselorInvitation {
+  id                 String           @id @default(uuid())
+  email              String           @unique
+  firstName          String
+  lastName           String
+  token              String           @unique
+  expiresAt          DateTime
+  used               Boolean          @default(false)
+  createdAt          DateTime         @default(now())
+}
+
+model AuditLog {
+  id                 String           @id @default(uuid())
+  actorId            String?
+  actor              User?            @relation("ActorAuditLogs", fields: [actorId], references: [id])
+  action             String
+  targetEntity       String
+  targetId           String?
+  ipAddress          String?
+  details            Json?
+  createdAt          DateTime         @default(now())
+
+  @@index([action, createdAt])
+}
+
+model Notification {
+  id                 String           @id @default(uuid())
+  userId             String
+  user               User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title              String
+  message            String           @db.Text
+  type               String
+  read               Boolean          @default(false)
+  createdAt          DateTime         @default(now())
+
+  @@index([userId, read])
 }
 
 

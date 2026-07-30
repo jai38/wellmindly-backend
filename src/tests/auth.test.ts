@@ -21,7 +21,7 @@ describe('Auth API Routes', () => {
     it('should successfully request an OTP', async () => {
       const res = await request(app)
         .post('/api/auth/send-otp')
-        .send({ email: 'test-student@wellmindly.edu' });
+        .send({ email: 'test-student@wellmindly.com' });
       expect(res.status).toBe(200);
       expect(res.body.message).toBe('Verification code sent to your email.');
     });
@@ -31,7 +31,7 @@ describe('Auth API Routes', () => {
     it('should fail registration with missing fields', async () => {
       const res = await request(app)
         .post('/api/auth/register')
-        .send({ email: 'test-student@wellmindly.edu' });
+        .send({ email: 'test-student@wellmindly.com' });
       expect(res.status).toBe(400);
       expect(res.body.error).toBeDefined();
     });

@@ -11,6 +11,10 @@ import universityRouter from './routes/university';
 import chatRouter from './routes/chat';
 import contactsRouter from './routes/contacts';
 import talkRouter from './routes/talk';
+import v1AdminRouter from './routes/v1/admin';
+import v1CounselorsRouter from './routes/v1/counselors';
+import v1StudentsRouter from './routes/v1/students';
+import { startReminderScheduler } from './utils/reminderService';
 
 const app = express();
 
@@ -64,7 +68,7 @@ app.use('/api/auth/register', strictAuthLimiter);
 app.use('/api/auth/login', strictAuthLimiter);
 app.use('/api/auth/forgot-password', strictAuthLimiter);
 
-// Routes
+// Legacy routes
 app.use('/api/auth', authRouter);
 app.use('/api/quizzes', quizzesRouter);
 app.use('/api/students', studentsRouter);
@@ -74,9 +78,17 @@ app.use('/api/chat', chatRouter);
 app.use('/api/contacts', contactsRouter);
 app.use('/api/talk', talkRouter);
 
+// API v1 Production Endpoints
+app.use('/api/v1/admin', v1AdminRouter);
+app.use('/api/v1/counselors', v1CounselorsRouter);
+app.use('/api/v1/students', v1StudentsRouter);
+
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', message: 'API is healthy' });
 });
+
+// Start background automated session reminder scheduler
+startReminderScheduler();
 
 app.listen(process.env.PORT || env.PORT, () => {
   console.log(`Server is running on port ${env.PORT}`);

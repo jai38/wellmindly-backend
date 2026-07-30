@@ -354,13 +354,13 @@ async function main() {
 
   // 2. Create 1 mock university conditionally
   let university = await prisma.university.findFirst({
-    where: { domain: 'wellmindly.edu' }
+    where: { domain: 'wellmindly.com' }
   });
   if (!university) {
     university = await prisma.university.create({
       data: {
         name: 'Wellmindly University',
-        domain: 'wellmindly.edu',
+        domain: 'wellmindly.com',
         verified: true,
       },
     });
@@ -383,11 +383,11 @@ async function main() {
 
   // 3. Create 5 mock student accounts conditionally
   const students = [
-    { firstName: 'Alice', lastName: 'Johnson', email: 'alice@wellmindly.edu' },
-    { firstName: 'Bob', lastName: 'Smith', email: 'bob@wellmindly.edu' },
-    { firstName: 'Carol', lastName: 'Williams', email: 'carol@wellmindly.edu' },
-    { firstName: 'David', lastName: 'Brown', email: 'david@wellmindly.edu' },
-    { firstName: 'Eva', lastName: 'Davis', email: 'eva@wellmindly.edu' },
+    { firstName: 'Alice', lastName: 'Johnson', email: 'alice@wellmindly.com' },
+    { firstName: 'Bob', lastName: 'Smith', email: 'bob@wellmindly.com' },
+    { firstName: 'Carol', lastName: 'Williams', email: 'carol@wellmindly.com' },
+    { firstName: 'David', lastName: 'Brown', email: 'david@wellmindly.com' },
+    { firstName: 'Eva', lastName: 'Davis', email: 'eva@wellmindly.com' },
   ];
 
   const targetQuizzes = ["Emotional check-in", "Mood snapshot", "Mental load"];
@@ -441,34 +441,37 @@ async function main() {
   }
 
   // 5. Create 1 admin account conditionally
-  let admin = await prisma.user.findUnique({
-    where: { email: 'admin@wellmindly.edu' }
-  });
-  if (!admin) {
-    const adminPasswordHash = await bcrypt.hash('AdminPass123!', SALT_ROUNDS);
-    admin = await prisma.user.create({
-      data: {
-        email: 'admin@wellmindly.edu',
-        passwordHash: adminPasswordHash,
-        firstName: 'Super',
-        lastName: 'Admin',
-        role: 'ADMIN',
-      },
+  const adminEmails = ['admin@wellmindly.com'];
+  for (const adminEmail of adminEmails) {
+    let admin = await prisma.user.findUnique({
+      where: { email: adminEmail }
     });
-    console.log(`✅ Admin: ${admin.firstName} ${admin.lastName} (id: ${admin.id})`);
-  } else {
-    console.log(`ℹ️ Admin ${admin.firstName} already exists. Skipping.`);
+    if (!admin) {
+      const adminPasswordHash = await bcrypt.hash('AdminPass123!', SALT_ROUNDS);
+      admin = await prisma.user.create({
+        data: {
+          email: adminEmail,
+          passwordHash: adminPasswordHash,
+          firstName: 'Super',
+          lastName: 'Admin',
+          role: 'ADMIN',
+        },
+      });
+      console.log(`✅ Admin: ${admin.firstName} ${admin.lastName} (${adminEmail})`);
+    } else {
+      console.log(`ℹ️ Admin ${adminEmail} already exists. Skipping.`);
+    }
   }
 
   // 5.5 Create 1 university staff account conditionally
   let universityUser = await prisma.user.findUnique({
-    where: { email: 'university@wellmindly.edu' }
+    where: { email: 'university@wellmindly.com' }
   });
   if (!universityUser) {
     const uniPasswordHash = await bcrypt.hash('AdminPass123!', SALT_ROUNDS);
     universityUser = await prisma.user.create({
       data: {
-        email: 'university@wellmindly.edu',
+        email: 'university@wellmindly.com',
         passwordHash: uniPasswordHash,
         firstName: 'University',
         lastName: 'Admin',
@@ -509,22 +512,82 @@ async function main() {
     { name: "General Reflection", description: "Quiet thoughts, late-night ponderings, and whatever is on your mind." }
   ];
 
-  console.log('🌱 Seeding default TalkRooms...');
-  for (const rDef of defaultRooms) {
-    const existing = await prisma.talkRoom.findUnique({
-      where: { name: rDef.name }
-    });
-    if (!existing) {
-      await prisma.talkRoom.create({
+  // 7. Seed Test Counselors
+  console.log('🌱 Seeding Test Counselors...');
+  const testCounselors = [
+    {
+      firstName: 'Sarah',
+      lastName: 'Jenkins',
+      email: 'counselor.sarah@wellmindly.com',
+      credentials: 'Ph.D. Clinical Psychology, Licensed Counselor',
+      specializations: ['Anxiety', 'Academic Stress', 'CBT', 'Burnout'],
+      bio: 'Over 10 years of experience helping university students navigate academic pressure, stress management, and emotional wellbeing.',
+      avatarUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&auto=format&fit=crop&q=80',
+    },
+    {
+      firstName: 'Michael',
+      lastName: 'Vance',
+      email: 'counselor.michael@wellmindly.com',
+      credentials: 'M.Sc. Counseling Psychology, LMHC',
+      specializations: ['Depression', 'Social Anxiety', 'Mindfulness', 'Life Transitions'],
+      bio: 'Specializing in student mental health, mindfulness-based stress reduction, and building healthy coping mechanisms.',
+      avatarUrl: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=400&auto=format&fit=crop&q=80',
+    },
+    {
+      firstName: 'Elena',
+      lastName: 'Rostova',
+      email: 'counselor.elena@wellmindly.com',
+      credentials: 'Psy.D., Board Certified Counselor',
+      specializations: ['Relationships', 'Self-Esteem', 'Career Guidance', 'Wellness'],
+      bio: 'Dedicated to empowering young adults through compassionate, evidence-based therapy and career identity clarity.',
+      avatarUrl: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=400&auto=format&fit=crop&q=80',
+    },
+  ];
+
+  for (const cData of testCounselors) {
+    let user = await prisma.user.findUnique({ where: { email: cData.email } });
+    const passwordHash = await bcrypt.hash('CounselorPass123!', SALT_ROUNDS);
+
+    if (!user) {
+      user = await prisma.user.create({
         data: {
-          name: rDef.name,
-          description: rDef.description,
-          isActive: true
-        }
+          email: cData.email,
+          passwordHash,
+          firstName: cData.firstName,
+          lastName: cData.lastName,
+          role: 'COUNSELOR',
+          timezone: 'UTC',
+        },
       });
-      console.log(`✅ Created TalkRoom: ${rDef.name}`);
+
+      const profile = await prisma.counselorProfile.create({
+        data: {
+          userId: user.id,
+          credentials: cData.credentials,
+          specializations: cData.specializations,
+          bio: cData.bio,
+          avatarUrl: cData.avatarUrl,
+          status: 'ACTIVE',
+        },
+      });
+
+      // Add weekly recurring availability (Mon-Fri 09:00 - 17:00)
+      for (let day = 1; day <= 5; day++) {
+        await prisma.counselorAvailability.create({
+          data: {
+            counselorId: profile.id,
+            dayOfWeek: day,
+            startTime: '09:00',
+            endTime: '17:00',
+            slotDurationMins: 45,
+            isAvailable: true,
+          },
+        });
+      }
+
+      console.log(`✅ Created Counselor: ${user.firstName} ${user.lastName} (${cData.email})`);
     } else {
-      console.log(`ℹ️ TalkRoom: ${rDef.name} already exists. Skipping.`);
+      console.log(`ℹ️ Counselor ${cData.email} already exists. Skipping.`);
     }
   }
 

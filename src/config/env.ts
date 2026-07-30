@@ -13,7 +13,7 @@ const envSchema = z.object({
   SMTP_PORT: z.coerce.number().optional(),
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
-  SMTP_FROM: z.string().optional().default('noreply@wellmindly.com'),
+  SMTP_FROM: z.string().optional().default('info@wellmindly.com'),
   GEMINI_API_KEY: z.string().optional(),
   GEMINI_MODEL: z.string().optional().default('gemini-3.5-flash'),
   ALLOWED_ORIGINS: z.string().optional().default('http://localhost:5173,http://localhost:5174,http://localhost:5175,https://wellmindly.com,http://localhost,capacitor://localhost'),
