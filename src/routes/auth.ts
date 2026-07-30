@@ -17,89 +17,97 @@ const googleClient = new OAuth2Client(env.GOOGLE_CLIENT_ID);
  * Body: { idToken: string }
  */
 router.post('/google/callback', async (req: Request, res: Response) => {
-  const { idToken } = req.body as { idToken?: string };
-
-  if (!idToken) {
-    res.status(400).json({ error: 'idToken is required' });
-    return;
-  }
-
-  // 1. Verify the Google ID token
-  let ticket: any;
   try {
-    ticket = await googleClient.verifyIdToken({
-      idToken,
-      audience: [env.GOOGLE_CLIENT_ID, '942167444638-jcpvjkm9j14lqj29lvn3gbcnju4nf5pt.apps.googleusercontent.com'].filter(Boolean),
-    });
-  } catch (err: any) {
-    console.error('Google ID token verification failed via SDK, attempting fallback decode:', err);
-    try {
-      const jwt = require('jsonwebtoken');
-      const decoded = jwt.decode(idToken) as any;
-      if (decoded && decoded.email && decoded.sub) {
-        ticket = { getPayload: () => decoded };
-      } else {
-        throw new Error('Invalid token payload');
-      }
-    } catch (fbErr) {
-      res.status(401).json({ error: 'Invalid or expired Google token' });
+    const { idToken } = req.body as { idToken?: string };
+
+    if (!idToken) {
+      res.status(400).json({ error: 'idToken is required' });
       return;
     }
-  }
 
-  const payload = ticket.getPayload();
-  if (!payload || !payload.email) {
-    res.status(401).json({ error: 'Google token payload is missing email' });
-    return;
-  }
+    // 1. Verify the Google ID token
+    let ticket: any;
+    try {
+      ticket = await googleClient.verifyIdToken({
+        idToken,
+        audience: [env.GOOGLE_CLIENT_ID, '942167444638-jcpvjkm9j14lqj29lvn3gbcnju4nf5pt.apps.googleusercontent.com'].filter(Boolean),
+      });
+    } catch (err: any) {
+      console.error('Google ID token verification failed via SDK, attempting fallback decode:', err);
+      try {
+        const jwt = require('jsonwebtoken');
+        const decoded = jwt.decode(idToken) as any;
+        if (decoded && decoded.email && decoded.sub) {
+          ticket = { getPayload: () => decoded };
+        } else {
+          throw new Error('Invalid token payload');
+        }
+      } catch (fbErr) {
+        res.status(401).json({ error: 'Invalid or expired Google token' });
+        return;
+      }
+    }
 
-  const { sub: googleId, email, given_name: firstName = '', family_name: lastName = '' } = payload;
+    const payload = ticket.getPayload();
+    if (!payload || !payload.email) {
+      res.status(401).json({ error: 'Google token payload is missing email' });
+      return;
+    }
 
-  // 2. Extract the domain from the email and look up a verified university
-  const domain = email.split('@')[1];
-  const university = await prisma.university.findUnique({
-    where: { domain },
-  });
+    const { sub: googleId, email, given_name: firstName = '', family_name: lastName = '' } = payload;
+    const emailLower = email.toLowerCase().trim();
 
-  // 3. Upsert the user: create on first login, find on subsequent logins
-  const user = await prisma.user.upsert({
-    where: { email },
-    update: {
-      googleId,
-      // Keep universityId in sync in case the university was verified after first login
-      ...(university ? { universityId: university.id } : {}),
-    },
-    create: {
-      email,
-      googleId,
-      firstName,
-      lastName,
-      role: 'STUDENT',
-      universityId: university?.id ?? null,
-    },
-  });
+    // 2. Extract domain from email and find matching university
+    const domain = emailLower.split('@')[1];
+    let university = null;
+    if (domain) {
+      university = await prisma.university.findFirst({
+        where: { domain: { equals: domain, mode: 'insensitive' } },
+      });
+    }
 
-  // 4. Issue a structured JWT
-  const token = signToken({
-    sub: user.id,
-    email: user.email,
-    role: user.role,
-    universityId: user.universityId,
-  });
+    // 3. Upsert the user: create on first login, find on subsequent logins
+    const user = await prisma.user.upsert({
+      where: { email: emailLower },
+      update: {
+        googleId,
+        ...(university ? { universityId: university.id } : {}),
+      },
+      create: {
+        email: emailLower,
+        googleId,
+        firstName,
+        lastName,
+        role: 'STUDENT',
+        universityId: university?.id ?? null,
+      },
+    });
 
-  res.status(200).json({
-    token,
-    user: {
-      id: user.id,
+    // 4. Issue a structured JWT
+    const token = signToken({
+      sub: user.id,
       email: user.email,
-      firstName: user.firstName,
-      lastName: user.lastName,
       role: user.role,
       universityId: user.universityId,
-      universityDomain: university?.domain ?? null,
-      universityVerified: university?.verified ?? false,
-    },
-  });
+    });
+
+    res.status(200).json({
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+        universityId: user.universityId,
+        universityDomain: university?.domain ?? null,
+        universityVerified: university?.verified ?? false,
+      },
+    });
+  } catch (error: any) {
+    console.error('Error in /api/auth/google/callback:', error);
+    res.status(500).json({ error: 'Google authentication failed', details: error?.message || 'Internal server error' });
+  }
 });
 
 interface OtpEntry {

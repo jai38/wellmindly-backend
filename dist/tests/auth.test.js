@@ -23,7 +23,7 @@ vitest_1.vi.mock('../utils/mailer', () => ({
         (0, vitest_1.it)('should successfully request an OTP', async () => {
             const res = await (0, supertest_1.default)(app_1.default)
                 .post('/api/auth/send-otp')
-                .send({ email: 'test-student@wellmindly.edu' });
+                .send({ email: 'test-student@wellmindly.com' });
             (0, vitest_1.expect)(res.status).toBe(200);
             (0, vitest_1.expect)(res.body.message).toBe('Verification code sent to your email.');
         });
@@ -32,7 +32,7 @@ vitest_1.vi.mock('../utils/mailer', () => ({
         (0, vitest_1.it)('should fail registration with missing fields', async () => {
             const res = await (0, supertest_1.default)(app_1.default)
                 .post('/api/auth/register')
-                .send({ email: 'test-student@wellmindly.edu' });
+                .send({ email: 'test-student@wellmindly.com' });
             (0, vitest_1.expect)(res.status).toBe(400);
             (0, vitest_1.expect)(res.body.error).toBeDefined();
         });

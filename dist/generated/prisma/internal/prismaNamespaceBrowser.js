@@ -48,7 +48,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.NullsOrder = exports.QueryMode = exports.SortOrder = exports.TalkReportScalarFieldEnum = exports.TalkReactionScalarFieldEnum = exports.TalkReplyScalarFieldEnum = exports.TalkNoteScalarFieldEnum = exports.TalkRoomScalarFieldEnum = exports.CounselorOnboardingScalarFieldEnum = exports.UniversityOnboardingScalarFieldEnum = exports.ContactRequestScalarFieldEnum = exports.CrisisHotlineScalarFieldEnum = exports.DailyCheckinScalarFieldEnum = exports.WaitlistScalarFieldEnum = exports.ChatMessageScalarFieldEnum = exports.QuizFeedbackScalarFieldEnum = exports.QuizResultScalarFieldEnum = exports.QuestionOptionScalarFieldEnum = exports.QuestionScalarFieldEnum = exports.QuizScalarFieldEnum = exports.UniversityScalarFieldEnum = exports.UserScalarFieldEnum = exports.TransactionIsolationLevel = exports.ModelName = exports.AnyNull = exports.JsonNull = exports.DbNull = exports.NullTypes = exports.Decimal = void 0;
+exports.JsonNullValueFilter = exports.NullsOrder = exports.QueryMode = exports.NullableJsonNullValueInput = exports.SortOrder = exports.NotificationScalarFieldEnum = exports.AuditLogScalarFieldEnum = exports.CounselorInvitationScalarFieldEnum = exports.CounselorFeedbackScalarFieldEnum = exports.StudentFeedbackScalarFieldEnum = exports.SessionNoteScalarFieldEnum = exports.CounselorSessionScalarFieldEnum = exports.CounselorAvailabilityExceptionScalarFieldEnum = exports.CounselorAvailabilityScalarFieldEnum = exports.CounselorProfileScalarFieldEnum = exports.TalkReportScalarFieldEnum = exports.TalkReactionScalarFieldEnum = exports.TalkReplyScalarFieldEnum = exports.TalkNoteScalarFieldEnum = exports.TalkRoomScalarFieldEnum = exports.CounselorOnboardingScalarFieldEnum = exports.UniversityOnboardingScalarFieldEnum = exports.ContactRequestScalarFieldEnum = exports.CrisisHotlineScalarFieldEnum = exports.DailyCheckinScalarFieldEnum = exports.WaitlistScalarFieldEnum = exports.ChatMessageScalarFieldEnum = exports.QuizFeedbackScalarFieldEnum = exports.QuizResultScalarFieldEnum = exports.QuestionOptionScalarFieldEnum = exports.QuestionScalarFieldEnum = exports.QuizScalarFieldEnum = exports.UniversityScalarFieldEnum = exports.UserScalarFieldEnum = exports.TransactionIsolationLevel = exports.ModelName = exports.AnyNull = exports.JsonNull = exports.DbNull = exports.NullTypes = exports.Decimal = void 0;
 const runtime = __importStar(require("@prisma/client/runtime/index-browser"));
 exports.Decimal = runtime.Decimal;
 exports.NullTypes = {
@@ -93,7 +93,17 @@ exports.ModelName = {
     TalkNote: 'TalkNote',
     TalkReply: 'TalkReply',
     TalkReaction: 'TalkReaction',
-    TalkReport: 'TalkReport'
+    TalkReport: 'TalkReport',
+    CounselorProfile: 'CounselorProfile',
+    CounselorAvailability: 'CounselorAvailability',
+    CounselorAvailabilityException: 'CounselorAvailabilityException',
+    CounselorSession: 'CounselorSession',
+    SessionNote: 'SessionNote',
+    StudentFeedback: 'StudentFeedback',
+    CounselorFeedback: 'CounselorFeedback',
+    CounselorInvitation: 'CounselorInvitation',
+    AuditLog: 'AuditLog',
+    Notification: 'Notification'
 };
 /*
  * Enums
@@ -111,6 +121,8 @@ exports.UserScalarFieldEnum = {
     firstName: 'firstName',
     lastName: 'lastName',
     role: 'role',
+    timezone: 'timezone',
+    deletedAt: 'deletedAt',
     googleId: 'googleId',
     universityId: 'universityId',
     talkNickname: 'talkNickname',
@@ -276,9 +288,123 @@ exports.TalkReportScalarFieldEnum = {
     reason: 'reason',
     createdAt: 'createdAt'
 };
+exports.CounselorProfileScalarFieldEnum = {
+    id: 'id',
+    userId: 'userId',
+    specializations: 'specializations',
+    credentials: 'credentials',
+    bio: 'bio',
+    avatarUrl: 'avatarUrl',
+    phone: 'phone',
+    status: 'status',
+    version: 'version',
+    deletedAt: 'deletedAt',
+    createdAt: 'createdAt',
+    updatedAt: 'updatedAt'
+};
+exports.CounselorAvailabilityScalarFieldEnum = {
+    id: 'id',
+    counselorId: 'counselorId',
+    dayOfWeek: 'dayOfWeek',
+    startTime: 'startTime',
+    endTime: 'endTime',
+    slotDurationMins: 'slotDurationMins',
+    isAvailable: 'isAvailable',
+    createdAt: 'createdAt'
+};
+exports.CounselorAvailabilityExceptionScalarFieldEnum = {
+    id: 'id',
+    counselorId: 'counselorId',
+    startDate: 'startDate',
+    endDate: 'endDate',
+    isFullDay: 'isFullDay',
+    reason: 'reason',
+    createdAt: 'createdAt'
+};
+exports.CounselorSessionScalarFieldEnum = {
+    id: 'id',
+    counselorId: 'counselorId',
+    studentId: 'studentId',
+    startTime: 'startTime',
+    endTime: 'endTime',
+    status: 'status',
+    meetingLink: 'meetingLink',
+    cancellationReason: 'cancellationReason',
+    version: 'version',
+    deletedAt: 'deletedAt',
+    createdAt: 'createdAt',
+    updatedAt: 'updatedAt'
+};
+exports.SessionNoteScalarFieldEnum = {
+    id: 'id',
+    sessionId: 'sessionId',
+    counselorId: 'counselorId',
+    studentId: 'studentId',
+    title: 'title',
+    content: 'content',
+    isPrivate: 'isPrivate',
+    isDraft: 'isDraft',
+    deletedAt: 'deletedAt',
+    createdAt: 'createdAt',
+    updatedAt: 'updatedAt'
+};
+exports.StudentFeedbackScalarFieldEnum = {
+    id: 'id',
+    sessionId: 'sessionId',
+    counselorId: 'counselorId',
+    studentId: 'studentId',
+    rating: 'rating',
+    comments: 'comments',
+    answers: 'answers',
+    deletedAt: 'deletedAt',
+    createdAt: 'createdAt'
+};
+exports.CounselorFeedbackScalarFieldEnum = {
+    id: 'id',
+    sessionId: 'sessionId',
+    counselorId: 'counselorId',
+    studentId: 'studentId',
+    rating: 'rating',
+    summaryNote: 'summaryNote',
+    answers: 'answers',
+    createdAt: 'createdAt'
+};
+exports.CounselorInvitationScalarFieldEnum = {
+    id: 'id',
+    email: 'email',
+    firstName: 'firstName',
+    lastName: 'lastName',
+    token: 'token',
+    expiresAt: 'expiresAt',
+    used: 'used',
+    createdAt: 'createdAt'
+};
+exports.AuditLogScalarFieldEnum = {
+    id: 'id',
+    actorId: 'actorId',
+    action: 'action',
+    targetEntity: 'targetEntity',
+    targetId: 'targetId',
+    ipAddress: 'ipAddress',
+    details: 'details',
+    createdAt: 'createdAt'
+};
+exports.NotificationScalarFieldEnum = {
+    id: 'id',
+    userId: 'userId',
+    title: 'title',
+    message: 'message',
+    type: 'type',
+    read: 'read',
+    createdAt: 'createdAt'
+};
 exports.SortOrder = {
     asc: 'asc',
     desc: 'desc'
+};
+exports.NullableJsonNullValueInput = {
+    DbNull: exports.DbNull,
+    JsonNull: exports.JsonNull
 };
 exports.QueryMode = {
     default: 'default',
@@ -287,4 +413,9 @@ exports.QueryMode = {
 exports.NullsOrder = {
     first: 'first',
     last: 'last'
+};
+exports.JsonNullValueFilter = {
+    DbNull: exports.DbNull,
+    JsonNull: exports.JsonNull,
+    AnyNull: exports.AnyNull
 };

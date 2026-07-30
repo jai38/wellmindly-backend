@@ -1,0 +1,433 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const bcrypt_1 = __importDefault(require("bcrypt"));
+const prisma_1 = __importDefault(require("../../lib/prisma"));
+const jwt_1 = require("../../lib/jwt");
+const rbac_1 = require("../../middleware/rbac");
+const response_1 = require("../../utils/response");
+const emailQueue_1 = require("../../utils/emailQueue");
+const auditLogger_1 = require("../../utils/auditLogger");
+const router = (0, express_1.Router)();
+/**
+ * POST /api/v1/counselors/verify-invite
+ * Check validity of counselor invitation token
+ */
+router.post('/verify-invite', async (req, res) => {
+    const { token } = req.body;
+    if (!token) {
+        (0, response_1.sendError)(res, 'INVALID_INPUT', 'Invitation token is required', 400);
+        return;
+    }
+    const invitation = await prisma_1.default.counselorInvitation.findUnique({
+        where: { token },
+    });
+    if (!invitation || invitation.used || invitation.expiresAt < new Date()) {
+        (0, response_1.sendError)(res, 'INVALID_INVITE', 'Invitation link is invalid or expired', 400);
+        return;
+    }
+    (0, response_1.sendSuccess)(res, {
+        email: invitation.email,
+        firstName: invitation.firstName,
+        lastName: invitation.lastName,
+    });
+});
+/**
+ * POST /api/v1/counselors/setup-profile
+ * Complete password setup and create counselor account from invite token
+ */
+router.post('/setup-profile', async (req, res) => {
+    const { token, password, credentials, specializations, bio, phone, timezone } = req.body;
+    if (!token || !password || !credentials) {
+        (0, response_1.sendError)(res, 'INVALID_INPUT', 'Token, password, and credentials are required', 400);
+        return;
+    }
+    const invitation = await prisma_1.default.counselorInvitation.findUnique({ where: { token } });
+    if (!invitation || invitation.used || invitation.expiresAt < new Date()) {
+        (0, response_1.sendError)(res, 'INVALID_INVITE', 'Invitation link is invalid or expired', 400);
+        return;
+    }
+    const passwordHash = await bcrypt_1.default.hash(password, 10);
+    // Transaction: Create user, create profile, mark invite used
+    const user = await prisma_1.default.$transaction(async (tx) => {
+        const newUser = await tx.user.create({
+            data: {
+                email: invitation.email,
+                firstName: invitation.firstName,
+                lastName: invitation.lastName,
+                passwordHash,
+                role: 'COUNSELOR',
+                timezone: timezone || 'UTC',
+            },
+        });
+        await tx.counselorProfile.create({
+            data: {
+                userId: newUser.id,
+                credentials,
+                specializations: specializations || ['General Wellness'],
+                bio: bio || '',
+                phone: phone || '',
+                status: 'ACTIVE',
+            },
+        });
+        await tx.counselorInvitation.update({
+            where: { id: invitation.id },
+            data: { used: true },
+        });
+        return newUser;
+    });
+    const jwtToken = (0, jwt_1.signToken)({
+        sub: user.id,
+        email: user.email,
+        role: user.role,
+        universityId: null,
+    });
+    (0, auditLogger_1.logAuditEvent)({
+        actorId: user.id,
+        action: 'REGISTER_COUNSELOR',
+        targetEntity: 'User',
+        targetId: user.id,
+        ipAddress: req.ip || null,
+    });
+    (0, response_1.sendSuccess)(res, { token: jwtToken, user: { id: user.id, email: user.email, role: user.role } }, 201);
+});
+/**
+ * POST /api/v1/counselors/login
+ * Counselor Authentication
+ */
+router.post('/login', async (req, res) => {
+    const { email, password } = req.body;
+    if (!email || !password) {
+        (0, response_1.sendError)(res, 'INVALID_INPUT', 'Email and password are required', 400);
+        return;
+    }
+    const user = await prisma_1.default.user.findUnique({
+        where: { email },
+        include: { counselorProfile: true },
+    });
+    if (!user || user.role !== 'COUNSELOR' || !user.passwordHash) {
+        (0, response_1.sendError)(res, 'INVALID_CREDENTIALS', 'Invalid email or password', 401);
+        return;
+    }
+    const validPassword = await bcrypt_1.default.compare(password, user.passwordHash);
+    if (!validPassword) {
+        (0, response_1.sendError)(res, 'INVALID_CREDENTIALS', 'Invalid email or password', 401);
+        return;
+    }
+    if (user.counselorProfile?.status === 'SUSPENDED') {
+        (0, response_1.sendError)(res, 'ACCOUNT_SUSPENDED', 'Your counselor account is suspended', 403);
+        return;
+    }
+    const token = (0, jwt_1.signToken)({
+        sub: user.id,
+        email: user.email,
+        role: user.role,
+        universityId: null,
+    });
+    (0, response_1.sendSuccess)(res, {
+        token,
+        user: {
+            id: user.id,
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            role: user.role,
+            counselorProfile: user.counselorProfile,
+        },
+    });
+});
+// Protected routes below
+router.use(rbac_1.authenticateJWT, (0, rbac_1.requireRoles)(['COUNSELOR', 'ADMIN', 'SUPER_ADMIN']));
+/**
+ * GET /api/v1/counselors/me/profile
+ */
+router.get('/me/profile', async (req, res) => {
+    const profile = await prisma_1.default.counselorProfile.findUnique({
+        where: { userId: req.user?.sub },
+        include: {
+            user: {
+                select: { id: true, email: true, firstName: true, lastName: true, timezone: true },
+            },
+            availabilities: true,
+            exceptions: true,
+        },
+    });
+    if (!profile) {
+        (0, response_1.sendError)(res, 'NOT_FOUND', 'Counselor profile not found', 404);
+        return;
+    }
+    (0, response_1.sendSuccess)(res, profile);
+});
+/**
+ * PUT /api/v1/counselors/me/profile
+ */
+router.put('/me/profile', async (req, res) => {
+    const { specializations, credentials, bio, phone, avatarUrl, timezone } = req.body;
+    const profile = await prisma_1.default.counselorProfile.findUnique({ where: { userId: req.user?.sub } });
+    if (!profile) {
+        (0, response_1.sendError)(res, 'NOT_FOUND', 'Counselor profile not found', 404);
+        return;
+    }
+    if (timezone) {
+        await prisma_1.default.user.update({
+            where: { id: req.user?.sub },
+            data: { timezone },
+        });
+    }
+    const updatedProfile = await prisma_1.default.counselorProfile.update({
+        where: { id: profile.id },
+        data: {
+            specializations,
+            credentials,
+            bio,
+            phone,
+            avatarUrl,
+        },
+        include: { user: true },
+    });
+    (0, response_1.sendSuccess)(res, updatedProfile);
+});
+/**
+ * GET /api/v1/counselors/me/exceptions
+ * Fetch date-specific blocked hours
+ */
+router.get('/me/exceptions', async (req, res) => {
+    const profile = await prisma_1.default.counselorProfile.findUnique({ where: { userId: req.user?.sub } });
+    if (!profile) {
+        (0, response_1.sendError)(res, 'NOT_FOUND', 'Profile not found', 404);
+        return;
+    }
+    const exceptions = await prisma_1.default.counselorAvailabilityException.findMany({
+        where: { counselorId: profile.id },
+        orderBy: { startDate: 'asc' },
+    });
+    (0, response_1.sendSuccess)(res, exceptions);
+});
+/**
+ * POST /api/v1/counselors/me/exceptions
+ * Block specific date/time hours
+ */
+router.post('/me/exceptions', async (req, res) => {
+    const { startDate, endDate, reason, isFullDay } = req.body;
+    if (!startDate || !endDate) {
+        (0, response_1.sendError)(res, 'INVALID_INPUT', 'startDate and endDate are required', 400);
+        return;
+    }
+    const profile = await prisma_1.default.counselorProfile.findUnique({ where: { userId: req.user?.sub } });
+    if (!profile) {
+        (0, response_1.sendError)(res, 'NOT_FOUND', 'Profile not found', 404);
+        return;
+    }
+    const exception = await prisma_1.default.counselorAvailabilityException.create({
+        data: {
+            counselorId: profile.id,
+            startDate: new Date(startDate),
+            endDate: new Date(endDate),
+            isFullDay: isFullDay ?? false,
+            reason: reason || 'Blocked by Counselor',
+        },
+    });
+    (0, auditLogger_1.logAuditEvent)({
+        actorId: req.user?.sub || null,
+        action: 'BLOCK_COUNSELOR_HOURS',
+        targetEntity: 'CounselorAvailabilityException',
+        targetId: exception.id,
+        details: { startDate, endDate, reason },
+    });
+    (0, response_1.sendSuccess)(res, exception, 201);
+});
+/**
+ * DELETE /api/v1/counselors/me/exceptions/:id
+ * Unblock hours
+ */
+router.delete('/me/exceptions/:id', async (req, res) => {
+    const id = String(req.params.id);
+    const profile = await prisma_1.default.counselorProfile.findUnique({ where: { userId: req.user?.sub } });
+    if (!profile) {
+        (0, response_1.sendError)(res, 'NOT_FOUND', 'Profile not found', 404);
+        return;
+    }
+    await prisma_1.default.counselorAvailabilityException.deleteMany({
+        where: { id, counselorId: profile.id },
+    });
+    (0, response_1.sendSuccess)(res, { message: 'Blockout removed successfully' });
+});
+/**
+ * PUT /api/v1/counselors/me/availability
+ * Replace weekly availability rules
+ */
+router.put('/me/availability', async (req, res) => {
+    const { availabilities } = req.body;
+    const profile = await prisma_1.default.counselorProfile.findUnique({ where: { userId: req.user?.sub } });
+    if (!profile) {
+        (0, response_1.sendError)(res, 'NOT_FOUND', 'Profile not found', 404);
+        return;
+    }
+    await prisma_1.default.$transaction(async (tx) => {
+        await tx.counselorAvailability.deleteMany({ where: { counselorId: profile.id } });
+        if (availabilities && availabilities.length > 0) {
+            await tx.counselorAvailability.createMany({
+                data: availabilities.map((a) => ({
+                    counselorId: profile.id,
+                    dayOfWeek: a.dayOfWeek,
+                    startTime: a.startTime,
+                    endTime: a.endTime,
+                    slotDurationMins: 60, // Fixed 60 minutes
+                    isAvailable: true,
+                })),
+            });
+        }
+    });
+    const updated = await prisma_1.default.counselorAvailability.findMany({
+        where: { counselorId: profile.id },
+    });
+    (0, response_1.sendSuccess)(res, updated);
+});
+/**
+ * GET /api/v1/counselors/me/sessions
+ */
+router.get('/me/sessions', async (req, res) => {
+    const profile = await prisma_1.default.counselorProfile.findUnique({ where: { userId: req.user?.sub } });
+    if (!profile) {
+        (0, response_1.sendError)(res, 'NOT_FOUND', 'Profile not found', 404);
+        return;
+    }
+    const sessions = await prisma_1.default.counselorSession.findMany({
+        where: { counselorId: profile.id, deletedAt: null },
+        include: {
+            student: { select: { id: true, firstName: true, lastName: true, email: true } },
+            notes: true,
+            studentFeedback: true,
+            counselorFeedback: true,
+        },
+        orderBy: { startTime: 'desc' },
+    });
+    (0, response_1.sendSuccess)(res, sessions);
+});
+/**
+ * POST /api/v1/counselors/me/sessions/:id/notes
+ * Add or update session note
+ */
+router.post('/me/sessions/:id/notes', async (req, res) => {
+    const sessionId = String(req.params.id);
+    const { title, content, isPrivate, isDraft } = req.body;
+    const profile = await prisma_1.default.counselorProfile.findUnique({ where: { userId: req.user?.sub } });
+    const session = await prisma_1.default.counselorSession.findUnique({ where: { id: sessionId } });
+    if (!profile || !session) {
+        (0, response_1.sendError)(res, 'NOT_FOUND', 'Session or profile not found', 404);
+        return;
+    }
+    const note = await prisma_1.default.sessionNote.create({
+        data: {
+            sessionId,
+            counselorId: profile.id,
+            studentId: session.studentId,
+            title: title || 'Session Note',
+            content: content || '',
+            isPrivate: isPrivate ?? true,
+            isDraft: isDraft ?? false,
+        },
+    });
+    (0, auditLogger_1.logAuditEvent)({
+        actorId: req.user?.sub || null,
+        action: 'CREATE_SESSION_NOTE',
+        targetEntity: 'SessionNote',
+        targetId: note.id,
+    });
+    (0, response_1.sendSuccess)(res, note, 201);
+});
+/**
+ * GET /api/v1/counselors/me/students/:studentId/timeline
+ * Student historical timeline (notes, sessions, feedback)
+ */
+router.get('/me/students/:studentId/timeline', async (req, res) => {
+    const studentId = String(req.params.studentId);
+    const profile = await prisma_1.default.counselorProfile.findUnique({ where: { userId: req.user?.sub } });
+    if (!profile) {
+        (0, response_1.sendError)(res, 'NOT_FOUND', 'Profile not found', 404);
+        return;
+    }
+    const [student, sessions, notes] = await Promise.all([
+        prisma_1.default.user.findUnique({
+            where: { id: studentId },
+            select: { id: true, firstName: true, lastName: true, email: true },
+        }),
+        prisma_1.default.counselorSession.findMany({
+            where: { counselorId: profile.id, studentId, deletedAt: null },
+            include: { studentFeedback: true, counselorFeedback: true },
+            orderBy: { startTime: 'desc' },
+        }),
+        prisma_1.default.sessionNote.findMany({
+            where: { counselorId: profile.id, studentId, deletedAt: null },
+            orderBy: { createdAt: 'desc' },
+        }),
+    ]);
+    (0, response_1.sendSuccess)(res, { student, sessions, notes });
+});
+/**
+ * POST /api/v1/counselors/me/students/:studentId/send-email
+ * Direct mailer tool
+ */
+router.post('/me/students/:studentId/send-email', async (req, res) => {
+    const studentId = String(req.params.studentId);
+    const { subject, message } = req.body;
+    if (!subject || !message) {
+        (0, response_1.sendError)(res, 'INVALID_INPUT', 'Subject and message are required', 400);
+        return;
+    }
+    const student = await prisma_1.default.user.findUnique({ where: { id: studentId } });
+    if (!student) {
+        (0, response_1.sendError)(res, 'NOT_FOUND', 'Student not found', 404);
+        return;
+    }
+    (0, emailQueue_1.queueEmail)({
+        to: student.email,
+        subject: `Message from your Counselor: ${subject}`,
+        html: `
+      <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b;">
+        <h3 style="color: #4f46e5;">Message from WellMindly Counselor</h3>
+        <p>Hello ${student.firstName},</p>
+        <div style="background-color: #f8fafc; padding: 16px; border-radius: 8px; margin: 16px 0;">
+          ${message}
+        </div>
+      </div>
+    `,
+    });
+    (0, auditLogger_1.logAuditEvent)({
+        actorId: req.user?.sub || null,
+        action: 'SEND_DIRECT_EMAIL_TO_STUDENT',
+        targetEntity: 'User',
+        targetId: studentId,
+        details: { subject },
+    });
+    (0, response_1.sendSuccess)(res, { message: 'Email queued successfully' });
+});
+/**
+ * POST /api/v1/counselors/me/sessions/:id/feedback
+ * Submit counselor post-session evaluation
+ */
+router.post('/me/sessions/:id/feedback', async (req, res) => {
+    const sessionId = String(req.params.id);
+    const { rating, summaryNote, answers } = req.body;
+    const profile = await prisma_1.default.counselorProfile.findUnique({ where: { userId: req.user?.sub } });
+    const session = await prisma_1.default.counselorSession.findUnique({ where: { id: sessionId } });
+    if (!profile || !session) {
+        (0, response_1.sendError)(res, 'NOT_FOUND', 'Session or profile not found', 404);
+        return;
+    }
+    const feedback = await prisma_1.default.counselorFeedback.create({
+        data: {
+            sessionId,
+            counselorId: profile.id,
+            studentId: session.studentId,
+            rating: rating || 5,
+            summaryNote: summaryNote || '',
+            answers: answers || {},
+        },
+    });
+    (0, response_1.sendSuccess)(res, feedback, 201);
+});
+exports.default = router;

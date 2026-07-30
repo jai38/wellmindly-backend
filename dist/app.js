@@ -16,6 +16,10 @@ const university_1 = __importDefault(require("./routes/university"));
 const chat_1 = __importDefault(require("./routes/chat"));
 const contacts_1 = __importDefault(require("./routes/contacts"));
 const talk_1 = __importDefault(require("./routes/talk"));
+const admin_2 = __importDefault(require("./routes/v1/admin"));
+const counselors_1 = __importDefault(require("./routes/v1/counselors"));
+const students_2 = __importDefault(require("./routes/v1/students"));
+const reminderService_1 = require("./utils/reminderService");
 const app = (0, express_1.default)();
 // Secure security headers
 app.use((0, helmet_1.default)());
@@ -58,7 +62,7 @@ app.use('/api', generalLimiter);
 app.use('/api/auth/register', strictAuthLimiter);
 app.use('/api/auth/login', strictAuthLimiter);
 app.use('/api/auth/forgot-password', strictAuthLimiter);
-// Routes
+// Legacy routes
 app.use('/api/auth', auth_1.default);
 app.use('/api/quizzes', quizzes_1.default);
 app.use('/api/students', students_1.default);
@@ -67,9 +71,15 @@ app.use('/api/university', university_1.default);
 app.use('/api/chat', chat_1.default);
 app.use('/api/contacts', contacts_1.default);
 app.use('/api/talk', talk_1.default);
+// API v1 Production Endpoints
+app.use('/api/v1/admin', admin_2.default);
+app.use('/api/v1/counselors', counselors_1.default);
+app.use('/api/v1/students', students_2.default);
 app.get('/health', (req, res) => {
     res.status(200).json({ status: 'ok', message: 'API is healthy' });
 });
+// Start background automated session reminder scheduler
+(0, reminderService_1.startReminderScheduler)();
 app.listen(process.env.PORT || env_1.env.PORT, () => {
     console.log(`Server is running on port ${env_1.env.PORT}`);
 });

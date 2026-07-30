@@ -9,11 +9,31 @@
 * 🟢 You can import this file directly.
 */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ReactionType = exports.TalkStatus = exports.Sender = exports.Role = void 0;
+exports.ReactionType = exports.TalkStatus = exports.Sender = exports.SessionStatus = exports.CounselorStatus = exports.Role = void 0;
 exports.Role = {
     STUDENT: 'STUDENT',
     ADMIN: 'ADMIN',
-    UNIVERSITY: 'UNIVERSITY'
+    SUPER_ADMIN: 'SUPER_ADMIN',
+    UNIVERSITY: 'UNIVERSITY',
+    COUNSELOR: 'COUNSELOR'
+};
+exports.CounselorStatus = {
+    INVITED: 'INVITED',
+    PROFILE_PENDING: 'PROFILE_PENDING',
+    UNDER_REVIEW: 'UNDER_REVIEW',
+    ACTIVE: 'ACTIVE',
+    SUSPENDED: 'SUSPENDED',
+    INACTIVE: 'INACTIVE'
+};
+exports.SessionStatus = {
+    PENDING: 'PENDING',
+    CONFIRMED: 'CONFIRMED',
+    IN_PROGRESS: 'IN_PROGRESS',
+    COMPLETED: 'COMPLETED',
+    NO_SHOW: 'NO_SHOW',
+    CANCELLED_BY_STUDENT: 'CANCELLED_BY_STUDENT',
+    CANCELLED_BY_COUNSELOR: 'CANCELLED_BY_COUNSELOR',
+    EXPIRED: 'EXPIRED'
 };
 exports.Sender = {
     USER: 'USER',
