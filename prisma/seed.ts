@@ -516,31 +516,13 @@ async function main() {
   console.log('🌱 Seeding Test Counselors...');
   const testCounselors = [
     {
-      firstName: 'Sarah',
-      lastName: 'Jenkins',
-      email: 'counselor.sarah@wellmindly.com',
-      credentials: 'Ph.D. Clinical Psychology, Licensed Counselor',
-      specializations: ['Anxiety', 'Academic Stress', 'CBT', 'Burnout'],
-      bio: 'Over 10 years of experience helping university students navigate academic pressure, stress management, and emotional wellbeing.',
+      firstName: 'Jai',
+      lastName: 'Malani',
+      email: 'jmalani44@gmail.com',
+      credentials: 'M.Sc. Clinical Psychology, Licensed Counselor',
+      specializations: ['Anxiety', 'Student Wellbeing', 'CBT', 'Stress Management'],
+      bio: 'Licensed counselor dedicated to student mental health, stress reduction, and emotional wellbeing.',
       avatarUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&auto=format&fit=crop&q=80',
-    },
-    {
-      firstName: 'Michael',
-      lastName: 'Vance',
-      email: 'counselor.michael@wellmindly.com',
-      credentials: 'M.Sc. Counseling Psychology, LMHC',
-      specializations: ['Depression', 'Social Anxiety', 'Mindfulness', 'Life Transitions'],
-      bio: 'Specializing in student mental health, mindfulness-based stress reduction, and building healthy coping mechanisms.',
-      avatarUrl: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=400&auto=format&fit=crop&q=80',
-    },
-    {
-      firstName: 'Elena',
-      lastName: 'Rostova',
-      email: 'counselor.elena@wellmindly.com',
-      credentials: 'Psy.D., Board Certified Counselor',
-      specializations: ['Relationships', 'Self-Esteem', 'Career Guidance', 'Wellness'],
-      bio: 'Dedicated to empowering young adults through compassionate, evidence-based therapy and career identity clarity.',
-      avatarUrl: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=400&auto=format&fit=crop&q=80',
     },
   ];
 
