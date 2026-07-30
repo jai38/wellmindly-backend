@@ -29,7 +29,9 @@ app.use(
   cors({
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
+      const isWellmindly = /^https:\/\/(.*\.)?wellmindly\.com$/i.test(origin);
       if (
+        isWellmindly ||
         allowedOrigins.indexOf(origin) !== -1 ||
         mobileOrigins.indexOf(origin) !== -1 ||
         allowedOrigins.includes('*')
