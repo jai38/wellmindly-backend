@@ -634,15 +634,15 @@ async function main() {
         },
       });
 
-      // Add weekly recurring availability (Mon-Fri 09:00 - 17:00)
-      for (let day = 1; day <= 5; day++) {
+      // Add weekly recurring availability (Mon-Sun 08:00 - 18:00 UTC)
+      for (let day = 0; day <= 6; day++) {
         await prisma.counselorAvailability.create({
           data: {
             counselorId: profile.id,
             dayOfWeek: day,
-            startTime: '09:00',
-            endTime: '17:00',
-            slotDurationMins: 45,
+            startTime: '08:00',
+            endTime: '18:00',
+            slotDurationMins: 60,
             isAvailable: true,
           },
         });
@@ -655,7 +655,7 @@ async function main() {
         where: { id: user.id },
         data: { passwordHash, role: 'COUNSELOR' },
       });
-      await prisma.counselorProfile.upsert({
+      const profile = await prisma.counselorProfile.upsert({
         where: { userId: user.id },
         update: {
           credentials: cData.credentials,
@@ -673,7 +673,23 @@ async function main() {
           status: 'ACTIVE',
         },
       });
-      console.log(`ℹ️ Updated Counselor ${cData.email} profile & password.`);
+
+      // Update counselor availability to 08:00 - 18:00 UTC
+      await prisma.counselorAvailability.deleteMany({ where: { counselorId: profile.id } });
+      for (let day = 0; day <= 6; day++) {
+        await prisma.counselorAvailability.create({
+          data: {
+            counselorId: profile.id,
+            dayOfWeek: day,
+            startTime: '08:00',
+            endTime: '18:00',
+            slotDurationMins: 60,
+            isAvailable: true,
+          },
+        });
+      }
+
+      console.log(`ℹ️ Updated Counselor ${cData.email} profile, password & availability (08:00 - 18:00 UTC).`);
     }
   }
 
