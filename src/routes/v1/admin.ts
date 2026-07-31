@@ -206,6 +206,140 @@ router.get('/calendar', async (req: AuthenticatedRequest, res: Response) => {
 });
 
 /**
+ * PUT /api/v1/admin/sessions/:id/cancel
+ * Admin cancels a scheduled counseling session
+ */
+router.put('/sessions/:id/cancel', async (req: AuthenticatedRequest, res: Response) => {
+  const id = String(req.params.id);
+  const { reason } = req.body as { reason?: string };
+
+  const session = await prisma.counselorSession.findUnique({ where: { id } });
+  if (!session || session.deletedAt) {
+    sendError(res, 'NOT_FOUND', 'Session not found', 404);
+    return;
+  }
+
+  const updated = await prisma.counselorSession.update({
+    where: { id },
+    data: {
+      status: 'CANCELLED_BY_COUNSELOR',
+      cancellationReason: reason || 'Cancelled by Administrator from Master Calendar',
+    },
+    include: {
+      counselor: { include: { user: { select: { firstName: true, lastName: true } } } },
+      student: { select: { firstName: true, lastName: true, email: true } },
+    },
+  });
+
+  logAuditEvent({
+    actorId: req.user?.sub || null,
+    action: 'CANCEL_SESSION_BY_ADMIN',
+    targetEntity: 'CounselorSession',
+    targetId: id,
+    details: { reason },
+  });
+
+  sendSuccess(res, updated);
+});
+
+/**
+ * DELETE /api/v1/admin/sessions/:id
+ * Admin soft-deletes a counseling session from Master Calendar
+ */
+router.delete('/sessions/:id', async (req: AuthenticatedRequest, res: Response) => {
+  const id = String(req.params.id);
+
+  const session = await prisma.counselorSession.findUnique({ where: { id } });
+  if (!session) {
+    sendError(res, 'NOT_FOUND', 'Session not found', 404);
+    return;
+  }
+
+  await prisma.counselorSession.update({
+    where: { id },
+    data: { deletedAt: new Date() },
+  });
+
+  logAuditEvent({
+    actorId: req.user?.sub || null,
+    action: 'DELETE_SESSION_BY_ADMIN',
+    targetEntity: 'CounselorSession',
+    targetId: id,
+  });
+
+  sendSuccess(res, { message: 'Session deleted successfully' });
+});
+
+/**
+ * PUT /api/v1/admin/sessions/:id/reschedule
+ * Admin reschedules a counseling session to a new date, time, or counselor
+ */
+router.put('/sessions/:id/reschedule', async (req: AuthenticatedRequest, res: Response) => {
+  const id = String(req.params.id);
+  const { startTime, endTime, counselorId } = req.body as {
+    startTime?: string;
+    endTime?: string;
+    counselorId?: string;
+  };
+
+  if (!startTime || !endTime) {
+    sendError(res, 'INVALID_INPUT', 'startTime and endTime are required for rescheduling', 400);
+    return;
+  }
+
+  const existingSession = await prisma.counselorSession.findUnique({ where: { id } });
+  if (!existingSession || existingSession.deletedAt) {
+    sendError(res, 'NOT_FOUND', 'Session not found', 404);
+    return;
+  }
+
+  const targetCounselorId = counselorId || existingSession.counselorId;
+  const newStart = new Date(startTime);
+  const newEnd = new Date(endTime);
+
+  // Check for conflicting active bookings for target counselor
+  const conflict = await prisma.counselorSession.findFirst({
+    where: {
+      id: { not: id },
+      counselorId: targetCounselorId,
+      status: { notIn: ['CANCELLED_BY_STUDENT', 'CANCELLED_BY_COUNSELOR', 'EXPIRED'] },
+      deletedAt: null,
+      startTime: { lte: newEnd },
+      endTime: { gte: newStart },
+    },
+  });
+
+  if (conflict) {
+    sendError(res, 'SLOT_ALREADY_BOOKED', 'Target counselor has a conflicting booking at this time.', 409);
+    return;
+  }
+
+  const updated = await prisma.counselorSession.update({
+    where: { id },
+    data: {
+      counselorId: targetCounselorId,
+      startTime: newStart,
+      endTime: newEnd,
+      status: 'CONFIRMED',
+    },
+    include: {
+      counselor: { include: { user: { select: { firstName: true, lastName: true } } } },
+      student: { select: { firstName: true, lastName: true, email: true } },
+    },
+  });
+
+  logAuditEvent({
+    actorId: req.user?.sub || null,
+    action: 'RESCHEDULE_SESSION_BY_ADMIN',
+    targetEntity: 'CounselorSession',
+    targetId: id,
+    details: { newStart, newEnd, targetCounselorId },
+  });
+
+  sendSuccess(res, updated);
+});
+
+/**
  * GET /api/v1/admin/feedback
  * Dual feedback overview (Student -> Counselor and Counselor -> Student)
  */
