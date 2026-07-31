@@ -519,16 +519,97 @@ async function main() {
       firstName: 'Jai',
       lastName: 'Malani',
       email: 'jmalani44@gmail.com',
+      password: 'CounselorPass123!',
       credentials: 'M.Sc. Clinical Psychology, Licensed Counselor',
       specializations: ['Anxiety', 'Student Wellbeing', 'CBT', 'Stress Management'],
       bio: 'Licensed counselor dedicated to student mental health, stress reduction, and emotional wellbeing.',
       avatarUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&auto=format&fit=crop&q=80',
     },
+    {
+      firstName: 'Kriti',
+      lastName: 'Sapra',
+      email: 'kritisapra@wellmindly.com',
+      password: 'Wellmindly@123',
+      credentials: 'PhD Scholar in Psychology (KGMU), Masters in Psychology (Dr B.R. Ambedkar Univ)',
+      specializations: ['Adolescent Mental Health', 'Stress Management', 'Problematic Internet/Technology Use', 'Interpersonal & Adjustment Concerns', 'CBT'],
+      bio: 'Compassionate psychologist focused on emotional well-being, stress management, and personal growth for adolescents and adults. Experienced in psychological assessment and fostering resilience through a client-centered approach.',
+      avatarUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&auto=format&fit=crop&q=80',
+    },
+    {
+      firstName: 'Shivangi',
+      lastName: 'Dadhich',
+      email: 'shivangidadhich@wellmindly.com',
+      password: 'Wellmindly@123',
+      credentials: "Dual Master's degrees in Development Studies and Psychology | Founder of 'Heal With Shivangi'",
+      specializations: ['Mindset Coaching', 'Holistic Healing', 'Mental Well-being', 'Personal Transformation', 'Access Bars'],
+      bio: 'Shivangi blends her background in psychology with a deep commitment to social change. She has collaborated with global organizations like UNICEF, UNFPA, and Oxfam on projects impacting community work. As a mindset coach, she focuses on empowerment, fostering resilience, and guiding individuals through journeys of self-discovery.',
+      avatarUrl: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=400&auto=format&fit=crop&q=80',
+    },
+    {
+      firstName: 'Samreen',
+      lastName: 'Taneja',
+      email: 'samreentaneja@wellmindly.com',
+      password: 'Wellmindly@123',
+      credentials: 'M.A. in Clinical Psychology (Amity University Lucknow), CBT Certified Counsellor (Socially Souled)',
+      specializations: ['Anxiety', 'Stress Management', 'Emotional Regulation', 'Crisis Support', 'Psychological Testing', 'CBT'],
+      bio: 'Samreen is a dedicated psychologist with experience in individual counselling, crisis intervention, and tele-counselling. She focuses on creating a safe, empathetic, and structured environment for clients to address emotional and psychological challenges.',
+      avatarUrl: 'https://images.unsplash.com/photo-1567532939604-b6b5b0db2604?w=400&auto=format&fit=crop&q=80',
+    },
+    {
+      firstName: 'Richa',
+      lastName: 'Khanna Bose',
+      email: 'richakhannabose@wellmindly.com',
+      password: 'Wellmindly@123',
+      credentials: 'Master of Psychology (IGNOU - Pursuing), PG Diploma in Counselling Skills (TISS, Mumbai)',
+      specializations: ['Anxiety & Depression', 'Stress Management', 'CBT', 'Solution-Focused Therapy', 'Narrative Therapy', 'Somatic Therapy'],
+      bio: 'Richa is a dedicated mental health professional providing individual therapy to adults. She integrates her psychological training with over a decade of corporate experience to offer a well-rounded, empathetic approach to mental well-being.',
+      avatarUrl: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=400&auto=format&fit=crop&q=80',
+    },
+    {
+      firstName: 'Varisha',
+      lastName: 'Nigar',
+      email: 'varishanigar@wellmindly.com',
+      password: 'Wellmindly@123',
+      credentials: 'M.A. Psychology (University of Lucknow - Pursuing), Bachelor of Education',
+      specializations: ['Psychology Mentorship', 'Mental Health Awareness', 'Empowerment Research', 'Peer Support'],
+      bio: 'Varisha is a dedicated academic and psychology professional with a strong foundation in mental health education and research. She has a proven track record of providing personalized academic support and mentorship to help students master complex psychological concepts.',
+      avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80',
+    },
+    {
+      firstName: 'Vinayak',
+      lastName: 'Katyayan',
+      email: 'vinayakkatyayan@wellmindly.com',
+      password: 'Wellmindly@123',
+      credentials: 'PhD Scholar in Psychology (KGMU), Clinical Research Associate',
+      specializations: ['Youth Mental Health', 'Clinical Psychology', 'Structured Recovery', 'Evidence-Based Care', 'Holistic Wellbeing'],
+      bio: 'Vinayak Katyayan is a practicing Clinical Psychologist and PhD Scholar at King George\'s Medical University (KGMU). He combines high-level clinical assessment and research with a dedicated focus on long-term emotional wellbeing and recovery for young adults.',
+      avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&auto=format&fit=crop&q=80',
+    },
+    {
+      firstName: 'Garvita',
+      lastName: 'Singh',
+      email: 'garvitasingh@wellmindly.com',
+      password: 'Wellmindly@123',
+      credentials: 'Ph.D. in Psychology (Pursuing), 9+ Years Experience in Psychology Education',
+      specializations: ['Youth Wellbeing', 'Adolescent Expertise', 'Resilience Building', 'Stress Management', 'Holistic Growth'],
+      bio: 'Garvita Singh is a dedicated educator with over nine years of experience teaching Psychology. Currently pursuing a Ph.D. in Psychology, she focuses on creating nurturing environments that empower youth to grow academically and personally through an approachable, student-centered style.',
+      avatarUrl: 'https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?w=400&auto=format&fit=crop&q=80',
+    },
+    {
+      firstName: 'Jairus',
+      lastName: 'Rohan',
+      email: 'jairusrohan@wellmindly.com',
+      password: 'Wellmindly@123',
+      credentials: 'RBT #RBT-22-251913, Diploma in Special Education (ADHD, Autism, Learning Disabilities)',
+      specializations: ['Behavioral Health', 'ABA Therapy', 'Neurodiversity (Autism/ADHD)', 'Skill Building', 'Sensory Integration'],
+      bio: 'Jairus is a compassionate behavioral professional dedicated to supporting youth with diverse needs. With extensive experience in ABA therapy and special education, he focuses on improving quality of life through personalized learning plans, positive reinforcement, and emotional regulation.',
+      avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&auto=format&fit=crop&q=80',
+    },
   ];
 
   for (const cData of testCounselors) {
     let user = await prisma.user.findUnique({ where: { email: cData.email } });
-    const passwordHash = await bcrypt.hash('CounselorPass123!', SALT_ROUNDS);
+    const passwordHash = await bcrypt.hash(cData.password || 'CounselorPass123!', SALT_ROUNDS);
 
     if (!user) {
       user = await prisma.user.create({
@@ -569,7 +650,30 @@ async function main() {
 
       console.log(`✅ Created Counselor: ${user.firstName} ${user.lastName} (${cData.email})`);
     } else {
-      console.log(`ℹ️ Counselor ${cData.email} already exists. Skipping.`);
+      // Ensure existing user password & active profile are up to date
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { passwordHash, role: 'COUNSELOR' },
+      });
+      await prisma.counselorProfile.upsert({
+        where: { userId: user.id },
+        update: {
+          credentials: cData.credentials,
+          specializations: cData.specializations,
+          bio: cData.bio,
+          avatarUrl: cData.avatarUrl,
+          status: 'ACTIVE',
+        },
+        create: {
+          userId: user.id,
+          credentials: cData.credentials,
+          specializations: cData.specializations,
+          bio: cData.bio,
+          avatarUrl: cData.avatarUrl,
+          status: 'ACTIVE',
+        },
+      });
+      console.log(`ℹ️ Updated Counselor ${cData.email} profile & password.`);
     }
   }
 

@@ -229,6 +229,96 @@ router.put('/me/profile', async (req: AuthenticatedRequest, res: Response) => {
 });
 
 /**
+ * PUT /api/v1/counselors/me/account
+ * Update email and/or password for counselor account
+ */
+router.put('/me/account', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user?.sub;
+    if (!userId) {
+      sendError(res, 'UNAUTHORIZED', 'Unauthorized', 401);
+      return;
+    }
+
+    const { email, currentPassword, newPassword } = req.body as {
+      email?: string;
+      currentPassword?: string;
+      newPassword?: string;
+    };
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      sendError(res, 'NOT_FOUND', 'User not found', 404);
+      return;
+    }
+
+    const updateData: { email?: string; passwordHash?: string } = {};
+
+    // 1. Update Email
+    if (email && email.trim().toLowerCase() !== user.email.toLowerCase()) {
+      const cleanEmail = email.trim().toLowerCase();
+      const existing = await prisma.user.findUnique({ where: { email: cleanEmail } });
+      if (existing) {
+        sendError(res, 'EMAIL_TAKEN', 'This email address is already in use by another user.', 400);
+        return;
+      }
+      updateData.email = cleanEmail;
+    }
+
+    // 2. Update Password
+    if (newPassword) {
+      if (!currentPassword) {
+        sendError(res, 'INVALID_INPUT', 'Current password is required to set a new password.', 400);
+        return;
+      }
+      if (user.passwordHash) {
+        const isValid = await bcrypt.compare(currentPassword, user.passwordHash);
+        if (!isValid) {
+          sendError(res, 'INVALID_CREDENTIALS', 'Current password entered is incorrect.', 400);
+          return;
+        }
+      }
+      if (newPassword.length < 6) {
+        sendError(res, 'INVALID_INPUT', 'New password must be at least 6 characters long.', 400);
+        return;
+      }
+      updateData.passwordHash = await bcrypt.hash(newPassword, 10);
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      sendError(res, 'INVALID_INPUT', 'No account fields were changed.', 400);
+      return;
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: updateData,
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        role: true,
+        timezone: true,
+      },
+    });
+
+    logAuditEvent({
+      actorId: userId,
+      action: 'UPDATE_COUNSELOR_ACCOUNT',
+      targetEntity: 'User',
+      targetId: userId,
+      details: { updatedEmail: !!updateData.email, updatedPassword: !!updateData.passwordHash },
+    });
+
+    sendSuccess(res, { user: updatedUser, message: 'Account credentials updated successfully.' });
+  } catch (err: any) {
+    console.error('Error updating counselor account:', err);
+    sendError(res, 'INTERNAL_ERROR', err?.message || 'Failed to update account credentials', 500);
+  }
+});
+
+/**
  * GET /api/v1/counselors/me/exceptions
  * Fetch date-specific blocked hours
  */
