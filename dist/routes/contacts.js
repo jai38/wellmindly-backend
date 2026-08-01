@@ -76,6 +76,48 @@ router.post('/counselor', async (req, res) => {
         res.status(500).json({ error: 'Failed to submit counselor onboarding request' });
     }
 });
+router.get('/coaches', async (_req, res) => {
+    try {
+        const counselors = await prisma_1.default.counselorProfile.findMany({
+            where: { status: 'ACTIVE', deletedAt: null },
+            include: {
+                user: {
+                    select: { firstName: true, lastName: true, email: true },
+                },
+            },
+            orderBy: { createdAt: 'asc' },
+        });
+        const gradients = [
+            'from-[#d8472f] to-[#a8331f]',
+            'from-[#0e7c6e] to-[#0a5a4a]',
+            'from-[#6d28d9] to-[#4818a0]',
+            'from-[#c8973a] to-[#a06f1f]',
+        ];
+        const formatted = counselors.map((c, index) => {
+            const name = `${c.user.firstName} ${c.user.lastName}`;
+            const init = `${c.user.firstName?.[0] || ''}${c.user.lastName?.[0] || ''}`.toUpperCase() || 'WC';
+            return {
+                id: c.id,
+                name,
+                firstName: c.user.firstName,
+                lastName: c.user.lastName,
+                role: c.credentials ? `${c.credentials.split(',')[0]}` : 'Wellbeing Coach',
+                credentials: c.credentials,
+                specializations: c.specializations,
+                specs: c.specializations.slice(0, 3),
+                bio: c.bio,
+                avatarUrl: c.avatarUrl,
+                init,
+                c1: gradients[index % gradients.length],
+            };
+        });
+        res.status(200).json({ success: true, coaches: formatted });
+    }
+    catch (error) {
+        console.error('Error fetching public coaches:', error);
+        res.status(500).json({ error: 'Failed to fetch coaches' });
+    }
+});
 // --- Admin Endpoints (Auth required + ADMIN role) ---
 router.get('/general', jwt_1.authenticateJWT, (0, jwt_1.authorizeRoles)('ADMIN'), async (req, res) => {
     try {
