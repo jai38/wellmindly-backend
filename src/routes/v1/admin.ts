@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import prisma from '../../lib/prisma';
 import { authenticateJWT, requireRoles, AuthenticatedRequest } from '../../middleware/rbac';
 import { sendSuccess, sendError } from '../../utils/response';
-import { queueEmail } from '../../utils/emailQueue';
+import { sendEmail } from '../../utils/mailer';
 import { logAuditEvent } from '../../utils/auditLogger';
 
 const router = Router();
@@ -60,7 +60,7 @@ router.post('/counselors/invite', async (req: AuthenticatedRequest, res: Respons
 
   const setupUrl = `${process.env.COUNSELOR_PORTAL_URL || 'http://localhost:5174'}/setup-profile?token=${token}`;
 
-  queueEmail({
+  await sendEmail({
     to: cleanEmail,
     subject: 'Invitation to Join WellMindly as a Counselor',
     html: `

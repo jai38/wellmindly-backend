@@ -35,6 +35,7 @@ export async function sendEmail({ to, subject, html, bcc }: EmailOptions) {
 
   // 1. Try Resend API if configured
   if (env.RESEND_API_KEY) {
+    const fromAddress = 'WellMindly <onboarding@resend.dev>';
     try {
       const response = await fetch('https://api.resend.com/emails', {
         method: 'POST',
@@ -43,7 +44,7 @@ export async function sendEmail({ to, subject, html, bcc }: EmailOptions) {
           Authorization: `Bearer ${env.RESEND_API_KEY}`,
         },
         body: JSON.stringify({
-          from: env.SMTP_FROM || 'WellMindly <onboarding@resend.dev>',
+          from: fromAddress,
           to: [to],
           bcc: finalBcc,
           subject,
@@ -55,7 +56,27 @@ export async function sendEmail({ to, subject, html, bcc }: EmailOptions) {
         console.log(`✉️ Email sent to ${to} (BCC: ${finalBcc.join(', ')}) via Resend API (id: ${data?.id})`);
         return;
       } else {
-        console.error(`❌ Resend API error sending email to ${to}:`, data);
+        console.warn(`⚠️ Resend API initial attempt failed for ${to}:`, data);
+        const retryResponse = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${env.RESEND_API_KEY}`,
+          },
+          body: JSON.stringify({
+            from: fromAddress,
+            to: [to],
+            subject,
+            html,
+          }),
+        });
+        const retryData = await retryResponse.json() as any;
+        if (retryResponse.ok) {
+          console.log(`✉️ Email sent to ${to} via Resend API fallback (id: ${retryData?.id})`);
+          return;
+        } else {
+          console.error(`❌ Resend API error sending email to ${to}:`, retryData);
+        }
       }
     } catch (resendErr) {
       console.error(`❌ Failed to send email via Resend API to ${to}:`, resendErr);

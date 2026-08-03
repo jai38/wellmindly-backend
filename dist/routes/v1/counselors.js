@@ -11,6 +11,7 @@ const rbac_1 = require("../../middleware/rbac");
 const response_1 = require("../../utils/response");
 const emailQueue_1 = require("../../utils/emailQueue");
 const auditLogger_1 = require("../../utils/auditLogger");
+const s3_1 = require("../../utils/s3");
 const router = (0, express_1.Router)();
 /**
  * POST /api/v1/counselors/verify-invite
@@ -189,6 +190,35 @@ router.put('/me/profile', async (req, res) => {
         include: { user: true },
     });
     (0, response_1.sendSuccess)(res, updatedProfile);
+});
+/**
+ * POST /api/v1/counselors/me/upload
+ * Upload profile picture to AWS S3 bucket wellmindly-assets (us-east-1)
+ */
+router.post('/me/upload', rbac_1.authenticateJWT, (0, rbac_1.requireRoles)(['COUNSELOR', 'ADMIN', 'SUPER_ADMIN']), async (req, res) => {
+    try {
+        const { fileName, mimeType, base64Data, folder } = req.body || {};
+        if (!base64Data) {
+            (0, response_1.sendError)(res, 'INVALID_INPUT', 'base64Data is required', 400);
+            return;
+        }
+        const cleanBase64 = base64Data.includes('base64,')
+            ? base64Data.split('base64,')[1]
+            : base64Data;
+        const buffer = Buffer.from(cleanBase64, 'base64');
+        const name = fileName || `avatar_${Date.now()}.png`;
+        const type = mimeType || 'image/png';
+        const result = await (0, s3_1.uploadToS3)(buffer, name, type, folder || 'avatars');
+        (0, response_1.sendSuccess)(res, {
+            message: 'File uploaded to AWS S3 successfully',
+            url: result.url,
+            key: result.key,
+        });
+    }
+    catch (error) {
+        console.error('Error uploading file to S3:', error);
+        (0, response_1.sendError)(res, 'UPLOAD_FAILED', 'Failed to upload file to S3', 500);
+    }
 });
 /**
  * PUT /api/v1/counselors/me/account

@@ -8,7 +8,7 @@ const crypto_1 = __importDefault(require("crypto"));
 const prisma_1 = __importDefault(require("../../lib/prisma"));
 const rbac_1 = require("../../middleware/rbac");
 const response_1 = require("../../utils/response");
-const emailQueue_1 = require("../../utils/emailQueue");
+const mailer_1 = require("../../utils/mailer");
 const auditLogger_1 = require("../../utils/auditLogger");
 const router = (0, express_1.Router)();
 // Protect all admin routes with JWT and ADMIN/SUPER_ADMIN roles
@@ -51,7 +51,7 @@ router.post('/counselors/invite', async (req, res) => {
         },
     });
     const setupUrl = `${process.env.COUNSELOR_PORTAL_URL || 'http://localhost:5174'}/setup-profile?token=${token}`;
-    (0, emailQueue_1.queueEmail)({
+    await (0, mailer_1.sendEmail)({
         to: cleanEmail,
         subject: 'Invitation to Join WellMindly as a Counselor',
         html: `

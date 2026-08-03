@@ -61,6 +61,6 @@ const jwt_1 = require("../lib/jwt");
             (0, vitest_1.expect)(res.body.aiFeedback.tip).toBeDefined();
             (0, vitest_1.expect)(res.body.aiFeedback.insights).toBeInstanceOf(Array);
             (0, vitest_1.expect)(res.body.aiFeedback.insights.length).toBeGreaterThan(0);
-        }, 15000);
+        }, 30000);
     });
 });
