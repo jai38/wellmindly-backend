@@ -19,6 +19,10 @@ const envSchema = z.object({
   GEMINI_MODEL: z.string().optional().default('gemini-3.5-flash'),
   ALLOWED_ORIGINS: z.string().optional().default('http://localhost:5173,http://localhost:5174,http://localhost:5175,https://wellmindly.com,https://admin.wellmindly.com,https://counselor.wellmindly.com,https://university.wellmindly.com,https://www.wellmindly.com,http://localhost,capacitor://localhost'),
   CHAT_SESSION_MAX_REQUESTS: z.coerce.number().default(100),
+  AWS_REGION: z.string().optional().default('us-east-1'),
+  AWS_S3_BUCKET: z.string().optional().default('wellmindly-assets'),
+  AWS_ACCESS_KEY_ID: z.string().optional(),
+  AWS_SECRET_ACCESS_KEY: z.string().optional(),
 });
 
 const _env = envSchema.safeParse(process.env);

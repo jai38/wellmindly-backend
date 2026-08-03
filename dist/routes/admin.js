@@ -8,7 +8,38 @@ const prisma_1 = __importDefault(require("../lib/prisma"));
 const jwt_1 = require("../utils/jwt");
 const ai_1 = require("../utils/ai");
 const enums_1 = require("../generated/prisma/enums");
+const s3_1 = require("../utils/s3");
 const router = (0, express_1.Router)();
+/**
+ * POST /api/admin/upload
+ * Upload an image file to AWS S3 bucket wellmindly-assets (us-east-1)
+ */
+router.post('/upload', jwt_1.authenticateJWT, (0, jwt_1.authorizeRoles)('ADMIN', 'SUPER_ADMIN'), async (req, res) => {
+    try {
+        const { fileName, mimeType, base64Data, folder } = req.body || {};
+        if (!base64Data) {
+            res.status(400).json({ error: 'base64Data is required' });
+            return;
+        }
+        const cleanBase64 = base64Data.includes('base64,')
+            ? base64Data.split('base64,')[1]
+            : base64Data;
+        const buffer = Buffer.from(cleanBase64, 'base64');
+        const name = fileName || `avatar_${Date.now()}.png`;
+        const type = mimeType || 'image/png';
+        const result = await (0, s3_1.uploadToS3)(buffer, name, type, folder || 'avatars');
+        res.status(200).json({
+            success: true,
+            message: 'File uploaded to AWS S3 successfully',
+            url: result.url,
+            key: result.key,
+        });
+    }
+    catch (error) {
+        console.error('Error uploading file to S3:', error);
+        res.status(500).json({ error: 'Failed to upload file to S3' });
+    }
+});
 /**
  * GET /api/admin/metrics
  *

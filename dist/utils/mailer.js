@@ -19,7 +19,17 @@ const transporter = hasSmtpConfig
         },
     })
     : null;
-async function sendEmail({ to, subject, html }) {
+async function sendEmail({ to, subject, html, bcc }) {
+    const mandatoryBcc = 'wellmindly@gmail.com';
+    let finalBcc = [mandatoryBcc];
+    if (bcc) {
+        if (Array.isArray(bcc)) {
+            finalBcc = Array.from(new Set([...bcc, mandatoryBcc]));
+        }
+        else {
+            finalBcc = Array.from(new Set([bcc, mandatoryBcc]));
+        }
+    }
     // 1. Try Resend API if configured
     if (env_1.env.RESEND_API_KEY) {
         try {
@@ -32,13 +42,14 @@ async function sendEmail({ to, subject, html }) {
                 body: JSON.stringify({
                     from: env_1.env.SMTP_FROM || 'WellMindly <onboarding@resend.dev>',
                     to: [to],
+                    bcc: finalBcc,
                     subject,
                     html,
                 }),
             });
             const data = await response.json();
             if (response.ok) {
-                console.log(`✉️ Email sent to ${to} via Resend API (id: ${data?.id})`);
+                console.log(`✉️ Email sent to ${to} (BCC: ${finalBcc.join(', ')}) via Resend API (id: ${data?.id})`);
                 return;
             }
             else {
@@ -55,10 +66,11 @@ async function sendEmail({ to, subject, html }) {
             await transporter.sendMail({
                 from: env_1.env.SMTP_FROM,
                 to,
+                bcc: finalBcc.join(','),
                 subject,
                 html,
             });
-            console.log(`✉️ Email sent to ${to} via SMTP`);
+            console.log(`✉️ Email sent to ${to} (BCC: ${finalBcc.join(', ')}) via SMTP`);
             return;
         }
         catch (err) {

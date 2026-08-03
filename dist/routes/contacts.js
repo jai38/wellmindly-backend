@@ -4,9 +4,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
+const crypto_1 = __importDefault(require("crypto"));
 const zod_1 = require("zod");
 const prisma_1 = __importDefault(require("../lib/prisma"));
 const jwt_1 = require("../utils/jwt");
+const mailer_1 = require("../utils/mailer");
 const router = (0, express_1.Router)();
 const generalContactSchema = zod_1.z.object({
     name: zod_1.z.string().min(1, 'Name is required'),
@@ -210,6 +212,123 @@ router.delete('/counselor/:id', jwt_1.authenticateJWT, (0, jwt_1.authorizeRoles)
     catch (error) {
         console.error('Error deleting counselor request:', error);
         res.status(500).json({ error: 'Failed to delete counselor onboarding request' });
+    }
+});
+router.post('/counselor/:id/request-docs', jwt_1.authenticateJWT, (0, jwt_1.authorizeRoles)('ADMIN'), async (req, res) => {
+    try {
+        const id = req.params.id;
+        const application = await prisma_1.default.counselorOnboarding.findUnique({ where: { id } });
+        if (!application) {
+            res.status(404).json({ error: 'Counselor application not found' });
+            return;
+        }
+        const emailSubject = 'Document & Certificate Verification Request - WellMindly Counselor Application';
+        const emailHtml = `
+        <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 16px;">
+          <h2 style="color: #4f46e5; margin-top: 0;">WellMindly Counselor Application Verification</h2>
+          <p>Hello <strong>${application.name}</strong>,</p>
+          <p>Thank you for submitting your counselor onboarding application to WellMindly. We are reviewing your application credentials (<em>${application.credentials}</em>).</p>
+          <p>To proceed with your application review and onboard you to our counselor network, please reply to this email with the following documents attached:</p>
+          <ul style="padding-left: 20px; color: #334155;">
+            <li><strong>Degree & Professional Certificates</strong> (M.A., Ph.D., RBT, or clinical certifications)</li>
+            <li><strong>Government-issued Identity Document</strong> (Passport or ID)</li>
+            <li><strong>Proof of Professional License / Practice Standing</strong></li>
+            <li>Any additional background documentation or reference letters</li>
+          </ul>
+          <p>If you have any questions, feel free to reply directly to this message or contact our team at <a href="mailto:wellmindly@gmail.com" style="color: #4f46e5;">wellmindly@gmail.com</a>.</p>
+          <p style="margin-top: 24px; color: #64748b; font-size: 13px;">Warm regards,<br /><strong>The WellMindly Clinical Operations Team</strong></p>
+        </div>
+      `;
+        await (0, mailer_1.sendEmail)({
+            to: application.email,
+            subject: emailSubject,
+            html: emailHtml,
+        });
+        res.status(200).json({
+            success: true,
+            message: `Document & certificate request email sent to ${application.email}`,
+        });
+    }
+    catch (error) {
+        console.error('Error requesting counselor documents:', error);
+        res.status(500).json({ error: 'Failed to send document request email' });
+    }
+});
+router.post('/counselor/:id/approve-onboard', jwt_1.authenticateJWT, (0, jwt_1.authorizeRoles)('ADMIN'), async (req, res) => {
+    try {
+        const id = req.params.id;
+        const application = await prisma_1.default.counselorOnboarding.findUnique({ where: { id } });
+        if (!application) {
+            res.status(404).json({ error: 'Counselor application not found' });
+            return;
+        }
+        const nameParts = application.name.trim().split(' ');
+        const firstName = nameParts[0] || application.name;
+        const lastName = nameParts.slice(1).join(' ') || 'Counselor';
+        const cleanEmail = application.email.trim().toLowerCase();
+        let user = await prisma_1.default.user.findUnique({ where: { email: cleanEmail } });
+        if (!user) {
+            const token = crypto_1.default.randomBytes(32).toString('hex');
+            const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+            const invitation = await prisma_1.default.counselorInvitation.upsert({
+                where: { email: cleanEmail },
+                update: { firstName, lastName, token, expiresAt, used: false },
+                create: { email: cleanEmail, firstName, lastName, token, expiresAt },
+            });
+            const setupUrl = `${process.env.COUNSELOR_PORTAL_URL || 'http://localhost:5174'}/setup-profile?token=${token}`;
+            await (0, mailer_1.sendEmail)({
+                to: cleanEmail,
+                subject: 'Congratulations! Your WellMindly Counselor Application is Approved',
+                html: `
+            <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 16px;">
+              <h2 style="color: #4f46e5; margin-top: 0;">Application Approved & Onboarding Invitation</h2>
+              <p>Hello <strong>${firstName} ${lastName}</strong>,</p>
+              <p>We are delighted to inform you that your counselor onboarding application (<em>${application.credentials}</em>) has been <strong>approved</strong> by the WellMindly team!</p>
+              <p>Please click the button below to complete your registration, set up your account password, and configure your counselor profile & availability slots:</p>
+              <p style="margin: 28px 0;">
+                <a href="${setupUrl}" style="background-color: #4f46e5; color: white; padding: 12px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block; box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);">Set Up Counselor Profile</a>
+              </p>
+              <p style="color: #64748b; font-size: 13px;">Direct Link: <a href="${setupUrl}" style="color: #4f46e5;">${setupUrl}</a></p>
+              <p style="color: #94a3b8; font-size: 12px; margin-top: 24px;">This invitation link will remain valid for 7 days.</p>
+            </div>
+          `,
+            });
+            res.status(200).json({
+                success: true,
+                message: `Counselor application approved! Onboarding invitation emailed to ${cleanEmail}`,
+                setupUrl,
+                invitation,
+            });
+        }
+        else {
+            if (user.role !== 'COUNSELOR') {
+                user = await prisma_1.default.user.update({
+                    where: { id: user.id },
+                    data: { role: 'COUNSELOR' },
+                });
+            }
+            const existingProfile = await prisma_1.default.counselorProfile.findUnique({ where: { userId: user.id } });
+            if (!existingProfile) {
+                await prisma_1.default.counselorProfile.create({
+                    data: {
+                        userId: user.id,
+                        credentials: application.credentials,
+                        specializations: ['Youth Wellbeing', 'Mentorship'],
+                        bio: application.experience || application.message,
+                        phone: application.phone,
+                        status: 'ACTIVE',
+                    },
+                });
+            }
+            res.status(200).json({
+                success: true,
+                message: `Counselor application approved! Account for ${cleanEmail} activated as Counselor.`,
+            });
+        }
+    }
+    catch (error) {
+        console.error('Error approving counselor application:', error);
+        res.status(500).json({ error: 'Failed to approve counselor application' });
     }
 });
 exports.default = router;

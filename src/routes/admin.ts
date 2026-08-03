@@ -3,8 +3,49 @@ import prisma from '../lib/prisma';
 import { authenticateJWT, authorizeRoles } from '../utils/jwt';
 import { parseStoredClassification } from '../utils/ai';
 import { TalkStatus } from '../generated/prisma/enums';
+import { uploadToS3 } from '../utils/s3';
 
 const router = Router();
+
+/**
+ * POST /api/admin/upload
+ * Upload an image file to AWS S3 bucket wellmindly-assets (us-east-1)
+ */
+router.post(
+  '/upload',
+  authenticateJWT,
+  authorizeRoles('ADMIN', 'SUPER_ADMIN'),
+  async (req: Request, res: Response) => {
+    try {
+      const { fileName, mimeType, base64Data, folder } = req.body || {};
+
+      if (!base64Data) {
+        res.status(400).json({ error: 'base64Data is required' });
+        return;
+      }
+
+      const cleanBase64 = base64Data.includes('base64,')
+        ? base64Data.split('base64,')[1]
+        : base64Data;
+
+      const buffer = Buffer.from(cleanBase64, 'base64');
+      const name = fileName || `avatar_${Date.now()}.png`;
+      const type = mimeType || 'image/png';
+
+      const result = await uploadToS3(buffer, name, type, folder || 'avatars');
+
+      res.status(200).json({
+        success: true,
+        message: 'File uploaded to AWS S3 successfully',
+        url: result.url,
+        key: result.key,
+      });
+    } catch (error) {
+      console.error('Error uploading file to S3:', error);
+      res.status(500).json({ error: 'Failed to upload file to S3' });
+    }
+  }
+);
 
 /**
  * GET /api/admin/metrics

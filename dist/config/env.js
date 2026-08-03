@@ -23,6 +23,10 @@ const envSchema = zod_1.z.object({
     GEMINI_MODEL: zod_1.z.string().optional().default('gemini-3.5-flash'),
     ALLOWED_ORIGINS: zod_1.z.string().optional().default('http://localhost:5173,http://localhost:5174,http://localhost:5175,https://wellmindly.com,https://admin.wellmindly.com,https://counselor.wellmindly.com,https://university.wellmindly.com,https://www.wellmindly.com,http://localhost,capacitor://localhost'),
     CHAT_SESSION_MAX_REQUESTS: zod_1.z.coerce.number().default(100),
+    AWS_REGION: zod_1.z.string().optional().default('us-east-1'),
+    AWS_S3_BUCKET: zod_1.z.string().optional().default('wellmindly-assets'),
+    AWS_ACCESS_KEY_ID: zod_1.z.string().optional(),
+    AWS_SECRET_ACCESS_KEY: zod_1.z.string().optional(),
 });
 const _env = envSchema.safeParse(process.env);
 if (!_env.success) {
