@@ -130,9 +130,20 @@ router.post('/send-otp', async (req: Request, res: Response) => {
     return;
   }
 
+  const emailLower = email.toLowerCase().trim();
+
+  // 1. Check if email is already registered
+  const existingUser = await prisma.user.findUnique({
+    where: { email: emailLower },
+  });
+
+  if (existingUser) {
+    res.status(400).json({ error: 'Email address is already registered. Please sign in instead.' });
+    return;
+  }
+
   const code = Math.floor(100000 + Math.random() * 900000).toString();
   const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes expiration
-  const emailLower = email.toLowerCase().trim();
 
   otpStore.set(emailLower, { code, expiresAt });
 
@@ -144,7 +155,7 @@ router.post('/send-otp', async (req: Request, res: Response) => {
     });
     res.status(200).json({ message: 'Verification code sent to your email.' });
   } catch (err) {
-    console.error(err);
+    console.error('Error sending sign-up OTP:', err);
     res.status(500).json({ error: 'Failed to send verification code. Please try again.' });
   }
 });
