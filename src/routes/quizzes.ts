@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { authenticateJWT, authorizeRoles } from '../utils/jwt';
 import { generateQuizFeedback, parseStoredClassification } from '../utils/ai';
+import { bandFor, bandForPercent, WELLBEING_MAX_SCORE } from '../lib/wellbeing';
 
 const router = Router();
 
@@ -72,8 +73,8 @@ router.get('/:id/questions', async (req: Request, res: Response) => {
  *
  * Ingests a payload array container tracking question scores.
  * Protected by user role middleware validation guards.
- * Server-side controller parses cumulative parameters,
- * assigns score threshold strings (e.g., PHQ-9 aggregate > 15 triggers 'Severe Depression' alert flag tags),
+ * Server-side controller parses cumulative parameters, assigns a
+ * non-diagnostic band string from src/lib/wellbeing.ts,
  * stores values to the QuizResult database table using Prisma,
  * and responds with the processed database object.
  */
@@ -180,46 +181,29 @@ router.post(
         return;
       }
 
-      // Assign score threshold strings if not provided
+      // Assign a non-diagnostic band string if the client did not send one.
+      // See src/lib/wellbeing.ts: this used to emit 'Severe Depression' at a
+      // score of 13 out of 15 on a five-question instrument, which is a
+      // diagnosis this service cannot make. Cut points are unchanged.
       if (!classification && quiz) {
-        classification = 'Minimal Depression';
-        const isPhq9 = quiz.title.toLowerCase().includes('phq-9') || quiz.category.toLowerCase().includes('clinical') || quiz.category.toLowerCase().includes('self-check');
+        const isWellbeingCheckin =
+          quiz.title.toLowerCase().includes('phq-9') ||
+          quiz.title.toLowerCase().includes('wellbeing check-in') ||
+          quiz.category.toLowerCase().includes('clinical') ||
+          quiz.category.toLowerCase().includes('self-check');
 
-        if (isPhq9) {
-          if (quiz.maxScore === 15) {
-            if (overallScore >= 13) {
-              classification = 'Severe Depression';
-            } else if (overallScore >= 9) {
-              classification = 'Moderate Stress';
-            } else if (overallScore >= 5) {
-              classification = 'Mild Stress';
-            } else {
-              classification = 'Minimal Stress';
-            }
-          } else {
-            if (overallScore > 15) {
-              classification = 'Severe Depression';
-            } else if (overallScore >= 10) {
-              classification = 'Moderate Depression';
-            } else if (overallScore >= 5) {
-              classification = 'Mild Depression';
-            } else {
-              classification = 'Minimal Depression';
-            }
-          }
+        if (isWellbeingCheckin && quiz.maxScore === WELLBEING_MAX_SCORE) {
+          classification = bandFor(overallScore).label;
         } else {
           const pct = quiz.maxScore > 0 ? (overallScore / quiz.maxScore) * 100 : 0;
-          if (pct >= 80) classification = 'Severe Stress';
-          else if (pct >= 50) classification = 'Moderate Stress';
-          else if (pct >= 20) classification = 'Mild Stress';
-          else classification = 'Minimal Stress';
+          classification = bandForPercent(pct);
         }
       }
 
-      // Explicit override as requested: e.g. aggregate > 15 triggers 'Severe Depression' alert flag tags
-      if (overallScore > 15 && quiz?.title.toLowerCase().includes('phq-9')) {
-        classification = 'Severe Depression';
-      }
+      // The old code had an explicit override here that forced
+      // 'Severe Depression' whenever a "phq-9" titled quiz scored above 15.
+      // It was unreachable for the five-question instrument (its max IS 15) and
+      // it was a diagnosis either way, so it is gone rather than rescored.
 
       let storedClassification = classification || 'Completed';
       let aiFeedbackResult = null;
