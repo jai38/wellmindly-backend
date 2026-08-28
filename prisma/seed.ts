@@ -123,7 +123,7 @@ const quizzesToSeed = [
     category: "Strengths",
     maxScore: 60,
     questions: [
-      { text: "I light up at new things — questions, ideas, and rabbit holes." },
+      { text: "I light up at new things - questions, ideas, and rabbit holes." },
       { text: "I prefer to go deep rather than wide to actually understand things." },
       { text: "I would rather make or build things than just talk about them." },
       { text: "I notice when someone is off and try to make them feel safe." },
@@ -131,7 +131,7 @@ const quizzesToSeed = [
       { text: "I naturally act as the one who keeps my group of people together." },
       { text: "I bend without breaking, and hard days don't take me all the way down." },
       { text: "I follow through and keep going even when it stops being fun." },
-      { text: "I do the scary thing anyway — the email, the talk, or the ask." },
+      { text: "I do the scary thing anyway - the email, the talk, or the ask." },
       { text: "I catch and appreciate the small good things others scroll past." },
       { text: "I have a strong sense of what's right and I stick to it." },
       { text: "I bring lightness and help people not carry things so heavily." }
@@ -218,7 +218,7 @@ function getMockClassification(quizTitle: string, score: number): string {
     let label = "Heavier Stretch";
     if (avg >= 4) label = "Doing Well";
     else if (avg >= 2.5) label = "Finding Footing";
-    
+
     return JSON.stringify({
       classification: label,
       aiFeedback: {
@@ -243,7 +243,7 @@ function getMockClassification(quizTitle: string, score: number): string {
     else if (score >= 48) label = "Tender";
     else if (score >= 40) label = "Tangled";
     else label = "Heavy";
-    
+
     return JSON.stringify({
       classification: label,
       aiFeedback: {
@@ -264,7 +264,7 @@ function getMockClassification(quizTitle: string, score: number): string {
     if (pct >= 75) label = "Excellent";
     else if (pct >= 50) label = "Steady";
     else label = "Taking Care";
-    
+
     return JSON.stringify({
       classification: label,
       aiFeedback: {
