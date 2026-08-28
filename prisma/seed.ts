@@ -512,6 +512,21 @@ async function main() {
     { name: "General Reflection", description: "Quiet thoughts, late-night ponderings, and whatever is on your mind." }
   ];
 
+  // This array was declared and never written, so TalkRoom stayed empty on every
+  // database and GET /talk/rooms correctly returned [] — TalkMindly rendered a blank
+  // screen with no failing request to point at. `name` is @unique, so upsert is the
+  // conditional part: re-running the seed neither duplicates a room nor reactivates
+  // one an admin has deliberately turned off.
+  console.log('🌱 Seeding TalkRooms...');
+  for (const room of defaultRooms) {
+    const created = await prisma.talkRoom.upsert({
+      where: { name: room.name },
+      update: { description: room.description },
+      create: { name: room.name, description: room.description },
+    });
+    console.log(`✅ TalkRoom: ${created.name} (active: ${created.isActive})`);
+  }
+
   // 7. Seed Test Counselors
   console.log('🌱 Seeding Test Counselors...');
   const testCounselors = [
