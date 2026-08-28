@@ -10,7 +10,7 @@ async function main() {
   console.log('🗑️ Cleared existing hotlines from database.');
 
   // Load the parsed hotlines JSON
-  const parsedPath = path.join(__dirname, '../../scratch/hotlines_parsed.json');
+  const parsedPath = path.join(__dirname, 'data/hotlines.json');
   const rawData = fs.readFileSync(parsedPath, 'utf8');
   const hotlines = JSON.parse(rawData);
 

@@ -4,6 +4,8 @@ import { z } from 'zod';
 import prisma from '../lib/prisma';
 import { authenticateJWT, authorizeRoles } from '../utils/jwt';
 import { sendEmail } from '../utils/mailer';
+import { queueEmail } from '../utils/emailQueue';
+import { env } from '../config/env';
 
 const router = Router();
 
@@ -38,7 +40,38 @@ router.post('/general', async (req: Request, res: Response) => {
   try {
     const data = generalContactSchema.parse(req.body);
     const request = await prisma.contactRequest.create({ data });
-    res.status(201).json({ success: true, message: 'Message sent successfully', data: request });
+
+    // (a) Submitter acknowledgement
+    queueEmail({
+      to: data.email,
+      subject: `We've received your message: ${data.subject || 'General Inquiry'}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b;">
+          <h2 style="color: #4f46e5;">Message Received</h2>
+          <p>Hello <strong>${data.name}</strong>,</p>
+          <p>Thank you for reaching out to WellMindly. We have received your message regarding <strong>${data.subject || 'General Inquiry'}</strong> and a member of our team will review it.</p>
+          <p style="color: #64748b; font-size: 14px; margin-top: 20px;">WellMindly Student Support Team</p>
+        </div>
+      `,
+    });
+
+    // (b) Internal notification
+    queueEmail({
+      to: env.CONTACT_NOTIFY_TO,
+      subject: `[Contact Request] ${data.subject || 'General Inquiry'} from ${data.name}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b;">
+          <h2 style="color: #4f46e5;">New Contact Request</h2>
+          <p><strong>From:</strong> ${data.name} (${data.email})</p>
+          <p><strong>Subject:</strong> ${data.subject || 'N/A'}</p>
+          <div style="background-color: #f8fafc; padding: 16px; border-radius: 8px; border-left: 4px solid #4f46e5; margin: 16px 0;">
+            <p style="white-space: pre-wrap; margin: 0;">${data.message}</p>
+          </div>
+        </div>
+      `,
+    });
+
+    res.status(201).json({ success: true, message: 'Message received', data: request });
   } catch (error) {
     if (error instanceof z.ZodError) {
       res.status(400).json({ error: error.issues[0].message });
@@ -53,7 +86,40 @@ router.post('/university', async (req: Request, res: Response) => {
   try {
     const data = universityContactSchema.parse(req.body);
     const request = await prisma.universityOnboarding.create({ data });
-    res.status(201).json({ success: true, message: 'University onboarding request sent successfully', data: request });
+
+    // (a) Submitter acknowledgement
+    queueEmail({
+      to: data.email,
+      subject: `University Partnership Inquiry: ${data.universityName}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b;">
+          <h2 style="color: #4f46e5;">University Onboarding Request Received</h2>
+          <p>Hello <strong>${data.name}</strong>,</p>
+          <p>Thank you for your interest in bringing WellMindly to <strong>${data.universityName}</strong>. Our partnerships team has received your request and will review your institution's details.</p>
+          <p style="color: #64748b; font-size: 14px; margin-top: 20px;">WellMindly University Partnerships</p>
+        </div>
+      `,
+    });
+
+    // (b) Internal notification
+    queueEmail({
+      to: env.CONTACT_NOTIFY_TO,
+      subject: `[University Partnership] ${data.universityName} from ${data.name}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b;">
+          <h2 style="color: #4f46e5;">New University Onboarding Request</h2>
+          <p><strong>Contact:</strong> ${data.name} (${data.email})</p>
+          <p><strong>University:</strong> ${data.universityName}</p>
+          <p><strong>Role:</strong> ${data.role}</p>
+          <p><strong>Phone:</strong> ${data.phone || 'N/A'}</p>
+          <div style="background-color: #f8fafc; padding: 16px; border-radius: 8px; border-left: 4px solid #4f46e5; margin: 16px 0;">
+            <p style="white-space: pre-wrap; margin: 0;">${data.message}</p>
+          </div>
+        </div>
+      `,
+    });
+
+    res.status(201).json({ success: true, message: 'University onboarding request received', data: request });
   } catch (error) {
     if (error instanceof z.ZodError) {
       res.status(400).json({ error: error.issues[0].message });
@@ -68,6 +134,41 @@ router.post('/counselor', async (req: Request, res: Response) => {
   try {
     const data = counselorContactSchema.parse(req.body);
     const request = await prisma.counselorOnboarding.create({ data });
+
+    // (a) Submitter acknowledgement
+    queueEmail({
+      to: data.email,
+      subject: `Counselor Application Received: ${data.name}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b;">
+          <h2 style="color: #4f46e5;">Counselor Application Received</h2>
+          <p>Hello <strong>${data.name}</strong>,</p>
+          <p>Thank you for applying to join the WellMindly counselor network. We have received your application with credentials (<strong>${data.credentials}</strong>) and our clinical review team will assess your submission.</p>
+          <p style="color: #64748b; font-size: 14px; margin-top: 20px;">WellMindly Clinical Operations</p>
+        </div>
+      `,
+    });
+
+    // (b) Internal notification
+    queueEmail({
+      to: env.CONTACT_NOTIFY_TO,
+      subject: `[Counselor Application] ${data.name} (${data.credentials})`,
+      html: `
+        <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b;">
+          <h2 style="color: #4f46e5;">New Counselor Application</h2>
+          <p><strong>Applicant:</strong> ${data.name} (${data.email})</p>
+          <p><strong>Phone:</strong> ${data.phone || 'N/A'}</p>
+          <p><strong>Credentials:</strong> ${data.credentials}</p>
+          <div style="background-color: #f8fafc; padding: 16px; border-radius: 8px; border-left: 4px solid #4f46e5; margin: 16px 0;">
+            <p><strong>Experience:</strong></p>
+            <p style="white-space: pre-wrap; margin: 0 0 12px 0;">${data.experience}</p>
+            <p><strong>Message / Statement:</strong></p>
+            <p style="white-space: pre-wrap; margin: 0;">${data.message}</p>
+          </div>
+        </div>
+      `,
+    });
+
     res.status(201).json({ success: true, message: 'Counselor application submitted successfully', data: request });
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -91,14 +192,7 @@ router.get('/coaches', async (_req: Request, res: Response) => {
       orderBy: { createdAt: 'asc' },
     });
 
-    const gradients = [
-      'from-[#d8472f] to-[#a8331f]',
-      'from-[#0e7c6e] to-[#0a5a4a]',
-      'from-[#6d28d9] to-[#4818a0]',
-      'from-[#c8973a] to-[#a06f1f]',
-    ];
-
-    const formatted = counselors.map((c, index) => {
+    const formatted = counselors.map((c) => {
       const name = `${c.user.firstName} ${c.user.lastName}`;
       const init = `${c.user.firstName?.[0] || ''}${c.user.lastName?.[0] || ''}`.toUpperCase() || 'WC';
 
@@ -114,7 +208,6 @@ router.get('/coaches', async (_req: Request, res: Response) => {
         bio: c.bio,
         avatarUrl: c.avatarUrl,
         init,
-        c1: gradients[index % gradients.length],
       };
     });
 

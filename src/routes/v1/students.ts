@@ -5,6 +5,7 @@ import { sendSuccess, sendError } from '../../utils/response';
 import { generateBookableSlots } from '../../services/slotGenerator';
 import { bookSessionTransaction } from '../../services/bookingService';
 import { logAuditEvent } from '../../utils/auditLogger';
+import { queueEmail } from '../../utils/emailQueue';
 
 const router = Router();
 
@@ -30,7 +31,10 @@ router.get('/counselors', async (req: AuthenticatedRequest, res: Response) => {
 
   const formatted = counselors.map((c) => {
     const ratings = c.receivedFeedback.map((f) => f.rating);
-    const avgRating = ratings.length > 0 ? (ratings.reduce((a, b) => a + b, 0) / ratings.length).toFixed(1) : '5.0';
+    const avgRating =
+      ratings.length > 0
+        ? parseFloat((ratings.reduce((a, b) => a + b, 0) / ratings.length).toFixed(1))
+        : null;
 
     return {
       id: c.id,
@@ -40,7 +44,7 @@ router.get('/counselors', async (req: AuthenticatedRequest, res: Response) => {
       specializations: c.specializations,
       bio: c.bio,
       avatarUrl: c.avatarUrl,
-      averageRating: parseFloat(avgRating),
+      averageRating: avgRating,
       totalReviews: ratings.length,
     };
   });
@@ -155,6 +159,10 @@ router.post('/sessions/:id/cancel', async (req: AuthenticatedRequest, res: Respo
 
   const session = await prisma.counselorSession.findFirst({
     where: { id, studentId: req.user?.sub },
+    include: {
+      counselor: { include: { user: true } },
+      student: true,
+    },
   });
 
   if (!session) {
@@ -185,6 +193,46 @@ router.post('/sessions/:id/cancel', async (req: AuthenticatedRequest, res: Respo
     targetId: id,
   });
 
+  // Queue async cancellation emails
+  const formattedTime = session.startTime.toUTCString();
+  const studentReason = reason || 'Cancelled by student';
+
+  // Notification to student
+  queueEmail({
+    to: session.student.email,
+    subject: `Cancelled: Counseling Session on ${formattedTime}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b;">
+        <h2 style="color: #4f46e5;">Counseling Session Cancelled</h2>
+        <p>Hello <strong>${session.student.firstName}</strong>,</p>
+        <p>Your session with <strong>${session.counselor.user.firstName} ${session.counselor.user.lastName}</strong> has been cancelled.</p>
+        <div style="background-color: #f8fafc; padding: 16px; border-radius: 8px; border-left: 4px solid #4f46e5; margin: 20px 0;">
+          <p style="margin: 4px 0;"><strong>Date & Time (UTC):</strong> ${formattedTime}</p>
+          <p style="margin: 4px 0;"><strong>Counselor:</strong> ${session.counselor.user.firstName} ${session.counselor.user.lastName}</p>
+          <p style="margin: 4px 0;"><strong>Reason:</strong> ${studentReason}</p>
+        </div>
+        <p style="color: #64748b; font-size: 14px;">You can book another session whenever you are ready.</p>
+      </div>
+    `,
+  });
+
+  // Notification to counselor
+  queueEmail({
+    to: session.counselor.user.email,
+    subject: `Session Cancelled by ${session.student.firstName} ${session.student.lastName}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b;">
+        <h2 style="color: #4f46e5;">Session Cancelled by Student</h2>
+        <p>Hello <strong>${session.counselor.user.firstName}</strong>,</p>
+        <p>Student <strong>${session.student.firstName} ${session.student.lastName}</strong> has cancelled their scheduled session.</p>
+        <div style="background-color: #f8fafc; padding: 16px; border-radius: 8px; border-left: 4px solid #4f46e5; margin: 20px 0;">
+          <p style="margin: 4px 0;"><strong>Cancelled Time (UTC):</strong> ${formattedTime}</p>
+        </div>
+        <p style="color: #64748b; font-size: 14px;">This slot is now available for other students to book.</p>
+      </div>
+    `,
+  });
+
   sendSuccess(res, updated);
 });
 
@@ -200,6 +248,11 @@ router.post('/sessions/:id/feedback', async (req: AuthenticatedRequest, res: Res
     answers?: any;
   };
 
+  if (typeof rating !== 'number' || !Number.isInteger(rating) || rating < 1 || rating > 5) {
+    sendError(res, 'INVALID_INPUT', 'Rating must be an integer between 1 and 5', 400);
+    return;
+  }
+
   const session = await prisma.counselorSession.findFirst({
     where: { id: sessionId, studentId: req.user?.sub },
   });
@@ -214,7 +267,7 @@ router.post('/sessions/:id/feedback', async (req: AuthenticatedRequest, res: Res
       sessionId,
       counselorId: session.counselorId,
       studentId: session.studentId,
-      rating: rating || 5,
+      rating,
       comments: comments || '',
       answers: answers || {},
     },

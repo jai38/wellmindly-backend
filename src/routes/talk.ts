@@ -1,48 +1,26 @@
 import { Router, Request, Response } from 'express';
 import { authenticateJWT, authorizeRoles } from '../utils/jwt';
-import { classifyCrisisContent, evaluateContentSafety } from '../utils/ai';
+import { evaluateContentSafety } from '../utils/ai';
 import prisma from '../lib/prisma';
 import { TalkStatus, ReactionType } from '../generated/prisma/enums';
 
 const router = Router();
 
-async function runModerationAgent(id: string, content: string, type: 'note' | 'reply') {
-  try {
-    const { isSafe, isCrisis, reason, inputTokens, outputTokens } = await evaluateContentSafety(content);
-    if (!isSafe) {
-      if (type === 'note') {
-        await prisma.talkNote.update({
-          where: { id },
-          data: {
-            status: isCrisis ? TalkStatus.FLAGGED : TalkStatus.REJECTED,
-            moderationReason: reason || 'Violates community standards',
-            isReported: isCrisis,
-            inputTokens: { increment: inputTokens },
-            outputTokens: { increment: outputTokens },
-          }
-        });
-      } else {
-        const reply = await prisma.talkReply.update({
-          where: { id },
-          data: {
-            status: isCrisis ? TalkStatus.FLAGGED : TalkStatus.REJECTED,
-            moderationReason: reason || 'Violates community standards',
-            inputTokens: { increment: inputTokens },
-            outputTokens: { increment: outputTokens },
-          }
-        });
+async function moderateBeforeCreate(content: string) {
+  const { isSafe, isCrisis, reason, inputTokens, outputTokens } =
+    await evaluateContentSafety(content);
 
-        if (isCrisis) {
-          await prisma.talkNote.update({
-            where: { id: reply.noteId },
-            data: { isReported: true },
-          });
-        }
-      }
-    }
-  } catch (err) {
-    console.error(`Error running async moderation agent for ${type} ${id}:`, err);
-  }
+  return {
+    status: isCrisis
+      ? TalkStatus.FLAGGED
+      : isSafe
+        ? TalkStatus.APPROVED
+        : TalkStatus.REJECTED,
+    moderationReason: isSafe && !isCrisis ? null : (reason || 'Violates community standards'),
+    isCrisis,
+    inputTokens,
+    outputTokens,
+  };
 }
 
 // ==========================================
@@ -268,7 +246,16 @@ router.get('/rooms/:roomId/notes', authenticateJWT, async (req: Request, res: Re
       orderBy,
       skip,
       take: limit,
-      include: {
+      select: {
+        id: true,
+        userId: true,
+        nickname: true,
+        avatar: true,
+        content: true,
+        status: true,
+        moderationReason: true,
+        meTooCount: true,
+        createdAt: true,
         replies: {
           where: {
             OR: [
@@ -277,12 +264,49 @@ router.get('/rooms/:roomId/notes', authenticateJWT, async (req: Request, res: Re
             ],
           },
           orderBy: { createdAt: 'asc' },
+          select: {
+            id: true,
+            userId: true,
+            nickname: true,
+            avatar: true,
+            content: true,
+            status: true,
+            moderationReason: true,
+            createdAt: true,
+          },
         },
-        reactions: true,
+        reactions: { select: { id: true, userId: true, type: true } },
       },
     });
 
-    res.status(200).json(notes);
+    const shaped = notes.map((n) => ({
+      id: n.id,
+      nickname: n.nickname,
+      avatar: n.avatar,
+      content: n.content,
+      status: n.status,
+      moderationReason: n.moderationReason,
+      meTooCount: n.meTooCount,
+      createdAt: n.createdAt,
+      isMine: n.userId === userId,
+      replies: n.replies.map((r) => ({
+        id: r.id,
+        nickname: r.nickname,
+        avatar: r.avatar,
+        content: r.content,
+        status: r.status,
+        moderationReason: r.moderationReason,
+        createdAt: r.createdAt,
+        isMine: r.userId === userId,
+      })),
+      reactions: n.reactions.map((x) => ({
+        id: x.id,
+        type: x.type,
+        isMine: x.userId === userId,
+      })),
+    }));
+
+    res.status(200).json(shaped);
   } catch (err) {
     console.error('Error fetching notes:', err);
     res.status(500).json({ error: 'Failed to fetch notes' });
@@ -318,7 +342,7 @@ router.post('/rooms/:roomId/notes', authenticateJWT, async (req: Request, res: R
     }
 
     if (content.length > 280) {
-      res.status(400).json({ error: 'Content exceeds 280 characters' });
+      res.status(400).json({ error: 'Content exceeds 280 characters limit' });
       return;
     }
 
@@ -336,7 +360,9 @@ router.post('/rooms/:roomId/notes', authenticateJWT, async (req: Request, res: R
       return;
     }
 
-    // Save note immediately as APPROVED (released on the spot)
+    // Moderate before create
+    const moderation = await moderateBeforeCreate(content);
+
     const note = await prisma.talkNote.create({
       data: {
         roomId: req.params.roomId as string,
@@ -344,26 +370,75 @@ router.post('/rooms/:roomId/notes', authenticateJWT, async (req: Request, res: R
         nickname: user.talkNickname,
         avatar: user.talkAvatar || 'panda',
         content,
-        status: TalkStatus.APPROVED,
-        isReported: false,
-        inputTokens: 0,
-        outputTokens: 0,
+        status: moderation.status,
+        moderationReason: moderation.moderationReason,
+        isReported: moderation.isCrisis,
+        inputTokens: moderation.inputTokens,
+        outputTokens: moderation.outputTokens,
       },
-      include: {
-        replies: true,
-        reactions: true,
+      select: {
+        id: true,
+        userId: true,
+        nickname: true,
+        avatar: true,
+        content: true,
+        status: true,
+        moderationReason: true,
+        meTooCount: true,
+        createdAt: true,
+        replies: {
+          select: {
+            id: true,
+            userId: true,
+            nickname: true,
+            avatar: true,
+            content: true,
+            status: true,
+            moderationReason: true,
+            createdAt: true,
+          },
+        },
+        reactions: { select: { id: true, userId: true, type: true } },
       },
     });
 
-    // Fire and forget safety monitoring agent asynchronously
-    runModerationAgent(note.id, note.content, 'note').catch(err =>
-      console.error('Failed to trigger async moderation agent:', err)
-    );
+    const shapedNote = {
+      id: note.id,
+      nickname: note.nickname,
+      avatar: note.avatar,
+      content: note.content,
+      status: note.status,
+      moderationReason: note.moderationReason,
+      meTooCount: note.meTooCount,
+      createdAt: note.createdAt,
+      isMine: note.userId === userId,
+      replies: note.replies.map((r) => ({
+        id: r.id,
+        nickname: r.nickname,
+        avatar: r.avatar,
+        content: r.content,
+        status: r.status,
+        moderationReason: r.moderationReason,
+        createdAt: r.createdAt,
+        isMine: r.userId === userId,
+      })),
+      reactions: note.reactions.map((x) => ({
+        id: x.id,
+        type: x.type,
+        isMine: x.userId === userId,
+      })),
+    };
+
+    const message = moderation.isCrisis
+      ? "What you wrote has been kept off the board for now, and someone on our team will read it. That review is not instant, and we are not an emergency service - so if you need help sooner, the people on the next page can talk to you today."
+      : moderation.status === TalkStatus.REJECTED
+        ? "That one hasn't gone up on the board. It's on your screen with a note about why, and nobody else can see it."
+        : "Note dropped on the wall successfully.";
 
     res.status(201).json({
-      note,
-      isCrisis: false,
-      message: "Note dropped on the wall successfully."
+      note: shapedNote,
+      isCrisis: moderation.isCrisis,
+      message,
     });
   } catch (err) {
     console.error('Error creating note:', err);
@@ -413,7 +488,9 @@ router.post('/notes/:noteId/replies', authenticateJWT, async (req: Request, res:
       return;
     }
 
-    // Save reply immediately as APPROVED (released on the spot)
+    // Moderate before create
+    const moderation = await moderateBeforeCreate(content);
+
     const reply = await prisma.talkReply.create({
       data: {
         noteId: req.params.noteId as string,
@@ -421,21 +498,51 @@ router.post('/notes/:noteId/replies', authenticateJWT, async (req: Request, res:
         nickname: user.talkNickname,
         avatar: user.talkAvatar || 'panda',
         content,
-        status: TalkStatus.APPROVED,
-        inputTokens: 0,
-        outputTokens: 0,
+        status: moderation.status,
+        moderationReason: moderation.moderationReason,
+        inputTokens: moderation.inputTokens,
+        outputTokens: moderation.outputTokens,
+      },
+      select: {
+        id: true,
+        userId: true,
+        nickname: true,
+        avatar: true,
+        content: true,
+        status: true,
+        moderationReason: true,
+        createdAt: true,
       },
     });
 
-    // Fire and forget safety monitoring agent asynchronously
-    runModerationAgent(reply.id, reply.content, 'reply').catch(err =>
-      console.error('Failed to trigger async moderation agent:', err)
-    );
+    if (moderation.isCrisis) {
+      await prisma.talkNote.update({
+        where: { id: req.params.noteId as string },
+        data: { isReported: true },
+      });
+    }
+
+    const shapedReply = {
+      id: reply.id,
+      nickname: reply.nickname,
+      avatar: reply.avatar,
+      content: reply.content,
+      status: reply.status,
+      moderationReason: reply.moderationReason,
+      createdAt: reply.createdAt,
+      isMine: reply.userId === userId,
+    };
+
+    const message = moderation.isCrisis
+      ? "What you wrote has been kept off the board for now, and someone on our team will read it. That review is not instant, and we are not an emergency service - so if you need help sooner, the people on the next page can talk to you today."
+      : moderation.status === TalkStatus.REJECTED
+        ? "That one hasn't gone up on the board. It's on your screen with a note about why, and nobody else can see it."
+        : "Reply added.";
 
     res.status(201).json({
-      reply,
-      isCrisis: false,
-      message: "Reply added."
+      reply: shapedReply,
+      isCrisis: moderation.isCrisis,
+      message,
     });
   } catch (err) {
     console.error('Error creating reply:', err);

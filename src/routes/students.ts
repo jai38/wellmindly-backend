@@ -301,8 +301,18 @@ router.get(
 /**
  * GET /api/students/hotlines
  *
- * Fetches all crisis hotlines from the database, grouped by category.
- * Protected by JWT authentication.
+ * Returns the full crisis hotline corpus, ordered by category then name.
+ *
+ * Deliberately PUBLIC - no `authenticateJWT`. `/crisis` is an unauthenticated
+ * route (frontend-student/src/App.tsx), and a student in crisis may not be
+ * logged in or may not have an account at all. Adding an auth guard here would
+ * 401 the people this endpoint exists for. It is still rate-limited by the
+ * `generalLimiter` mounted on `/api` in app.ts.
+ *
+ * The docstring here previously read "Protected by JWT authentication." That
+ * was false and is the kind of claim that invites someone to "fix" the code to
+ * match it. If this ever needs an auth guard, that is a product decision with
+ * a crisis-page fallback, not a consistency cleanup.
  */
 router.get(
   '/hotlines',
@@ -312,14 +322,7 @@ router.get(
         orderBy: [{ category: 'asc' }, { name: 'asc' }],
       });
 
-      // Group hotlines by category for the frontend
-      const grouped: Record<string, typeof hotlines> = {};
-      for (const h of hotlines) {
-        if (!grouped[h.category]) grouped[h.category] = [];
-        grouped[h.category].push(h);
-      }
-
-      res.status(200).json({ hotlines, grouped });
+      res.status(200).json({ hotlines });
     } catch (error) {
       console.error('Error fetching crisis hotlines:', error);
       res.status(500).json({ error: 'Failed to fetch crisis hotlines' });
