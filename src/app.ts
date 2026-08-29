@@ -89,6 +89,27 @@ app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', message: 'API is healthy' });
 });
 
+// Last-resort error handler. Express's own handler answers with an HTML page
+// containing the stack trace and absolute file paths, which is not something a
+// client should ever be shown; anything that escapes a route lands here instead
+// and gets the same JSON envelope the rest of the API uses.
+app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  const code = err?.code as string | undefined;
+  // Prisma's known request errors carry a code we can map to a real status.
+  const mapped =
+    code === 'P2025' ? { status: 404, code: 'NOT_FOUND', message: 'Record not found' } :
+    code === 'P2002' ? { status: 409, code: 'ALREADY_EXISTS', message: 'That value is already taken' } :
+    code === 'P2003' ? { status: 409, code: 'IN_USE', message: 'That record is still referenced elsewhere' } :
+    null;
+
+  if (!mapped) console.error('Unhandled route error:', err);
+  const body = mapped ?? { status: 500, code: 'INTERNAL_ERROR', message: 'Something went wrong' };
+  res.status(body.status).json({
+    success: false,
+    error: { code: body.code, message: body.message },
+  });
+});
+
 // Start background automated session reminder scheduler
 if (env.ENABLE_REMINDER_SCHEDULER) {
   startReminderScheduler();

@@ -311,6 +311,10 @@ router.delete(
       await prisma.contactRequest.delete({ where: { id } });
       res.status(200).json({ success: true, message: 'Contact request deleted' });
     } catch (error) {
+      if ((error as { code?: string })?.code === 'P2025') {
+        res.status(404).json({ error: 'Contact request not found' });
+        return;
+      }
       console.error('Error deleting contact request:', error);
       res.status(500).json({ error: 'Failed to delete contact request' });
     }
@@ -327,6 +331,10 @@ router.delete(
       await prisma.universityOnboarding.delete({ where: { id } });
       res.status(200).json({ success: true, message: 'University request deleted' });
     } catch (error) {
+      if ((error as { code?: string })?.code === 'P2025') {
+        res.status(404).json({ error: 'University request not found' });
+        return;
+      }
       console.error('Error deleting university request:', error);
       res.status(500).json({ error: 'Failed to delete university onboarding request' });
     }
@@ -343,6 +351,10 @@ router.delete(
       await prisma.counselorOnboarding.delete({ where: { id } });
       res.status(200).json({ success: true, message: 'Counselor request deleted' });
     } catch (error) {
+      if ((error as { code?: string })?.code === 'P2025') {
+        res.status(404).json({ error: 'Counselor request not found' });
+        return;
+      }
       console.error('Error deleting counselor request:', error);
       res.status(500).json({ error: 'Failed to delete counselor onboarding request' });
     }

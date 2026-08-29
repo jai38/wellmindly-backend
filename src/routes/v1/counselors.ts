@@ -519,6 +519,14 @@ router.post('/me/sessions/:id/notes', async (req: AuthenticatedRequest, res: Res
     return;
   }
 
+  // A note may only be written against the counselor's own session. Without this
+  // check any counselor could write into another counselor's clinical record,
+  // and the note would then surface in their own student timeline view.
+  if (session.counselorId !== profile.id) {
+    sendError(res, 'NOT_FOUND', 'Session not found', 404);
+    return;
+  }
+
   const note = await prisma.sessionNote.create({
     data: {
       sessionId,
@@ -555,8 +563,14 @@ router.get('/me/students/:studentId/timeline', async (req: AuthenticatedRequest,
   }
 
   const [student, sessions, notes] = await Promise.all([
-    prisma.user.findUnique({
-      where: { id: studentId },
+    // Scoped to a student this counselor actually has a session or a note with.
+    // A plain findUnique on studentId turned this route into a lookup for any
+    // user's name and email by uuid.
+    prisma.user.findFirst({
+      where: {
+        id: studentId,
+        studentSessions: { some: { counselorId: profile.id, deletedAt: null } },
+      },
       select: { id: true, firstName: true, lastName: true, email: true },
     }),
     prisma.counselorSession.findMany({
@@ -634,6 +648,21 @@ router.post('/me/sessions/:id/feedback', async (req: AuthenticatedRequest, res: 
 
   if (!profile || !session) {
     sendError(res, 'NOT_FOUND', 'Session or profile not found', 404);
+    return;
+  }
+
+  // Same ownership rule as the notes endpoint above.
+  if (session.counselorId !== profile.id) {
+    sendError(res, 'NOT_FOUND', 'Session not found', 404);
+    return;
+  }
+
+  // CounselorFeedback.sessionId is @unique, so a second submit for the same
+  // session used to escape as an unhandled Prisma error - which Express served
+  // as an HTML stack trace containing absolute file paths.
+  const existing = await prisma.counselorFeedback.findUnique({ where: { sessionId } });
+  if (existing) {
+    sendError(res, 'ALREADY_EXISTS', 'Feedback has already been submitted for this session', 409);
     return;
   }
 
