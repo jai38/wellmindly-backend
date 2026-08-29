@@ -90,7 +90,11 @@ app.get('/health', (req, res) => {
 });
 
 // Start background automated session reminder scheduler
-startReminderScheduler();
+if (env.ENABLE_REMINDER_SCHEDULER) {
+  startReminderScheduler();
+} else {
+  console.log('Reminder scheduler disabled (ENABLE_REMINDER_SCHEDULER=false)');
+}
 
 app.listen(process.env.PORT || env.PORT, () => {
   console.log(`Server is running on port ${env.PORT}`);

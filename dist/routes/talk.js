@@ -9,44 +9,19 @@ const ai_1 = require("../utils/ai");
 const prisma_1 = __importDefault(require("../lib/prisma"));
 const enums_1 = require("../generated/prisma/enums");
 const router = (0, express_1.Router)();
-async function runModerationAgent(id, content, type) {
-    try {
-        const { isSafe, isCrisis, reason, inputTokens, outputTokens } = await (0, ai_1.evaluateContentSafety)(content);
-        if (!isSafe) {
-            if (type === 'note') {
-                await prisma_1.default.talkNote.update({
-                    where: { id },
-                    data: {
-                        status: isCrisis ? enums_1.TalkStatus.FLAGGED : enums_1.TalkStatus.REJECTED,
-                        moderationReason: reason || 'Violates community standards',
-                        isReported: isCrisis,
-                        inputTokens: { increment: inputTokens },
-                        outputTokens: { increment: outputTokens },
-                    }
-                });
-            }
-            else {
-                const reply = await prisma_1.default.talkReply.update({
-                    where: { id },
-                    data: {
-                        status: isCrisis ? enums_1.TalkStatus.FLAGGED : enums_1.TalkStatus.REJECTED,
-                        moderationReason: reason || 'Violates community standards',
-                        inputTokens: { increment: inputTokens },
-                        outputTokens: { increment: outputTokens },
-                    }
-                });
-                if (isCrisis) {
-                    await prisma_1.default.talkNote.update({
-                        where: { id: reply.noteId },
-                        data: { isReported: true },
-                    });
-                }
-            }
-        }
-    }
-    catch (err) {
-        console.error(`Error running async moderation agent for ${type} ${id}:`, err);
-    }
+async function moderateBeforeCreate(content) {
+    const { isSafe, isCrisis, reason, inputTokens, outputTokens } = await (0, ai_1.evaluateContentSafety)(content);
+    return {
+        status: isCrisis
+            ? enums_1.TalkStatus.FLAGGED
+            : isSafe
+                ? enums_1.TalkStatus.APPROVED
+                : enums_1.TalkStatus.REJECTED,
+        moderationReason: isSafe && !isCrisis ? null : (reason || 'Violates community standards'),
+        isCrisis,
+        inputTokens,
+        outputTokens,
+    };
 }
 // ==========================================
 // 1. TalkRooms Management
@@ -63,6 +38,42 @@ router.get('/rooms', jwt_1.authenticateJWT, async (req, res) => {
     catch (err) {
         console.error('Error fetching rooms:', err);
         res.status(500).json({ error: 'Failed to fetch rooms' });
+    }
+});
+// POST /rooms - Create a new TalkRoom (Admin only)
+router.post('/rooms', jwt_1.authenticateJWT, (0, jwt_1.authorizeRoles)('ADMIN'), async (req, res) => {
+    try {
+        const { name, description } = req.body;
+        if (!name || name.trim().length === 0) {
+            res.status(400).json({ error: 'Room name is required' });
+            return;
+        }
+        const room = await prisma_1.default.talkRoom.create({
+            data: {
+                name: name.trim(),
+                description: description?.trim() || null,
+                isActive: true,
+            },
+        });
+        res.status(201).json({ success: true, room });
+    }
+    catch (err) {
+        console.error('Error creating room:', err);
+        res.status(500).json({ error: 'Failed to create room' });
+    }
+});
+// DELETE /rooms/:id - Delete / Deactivate a TalkRoom (Admin only)
+router.delete('/rooms/:id', jwt_1.authenticateJWT, (0, jwt_1.authorizeRoles)('ADMIN'), async (req, res) => {
+    try {
+        const { id } = req.params;
+        await prisma_1.default.talkRoom.delete({
+            where: { id: id },
+        });
+        res.status(200).json({ success: true });
+    }
+    catch (err) {
+        console.error('Error deleting room:', err);
+        res.status(500).json({ error: 'Failed to delete room' });
     }
 });
 // GET /profile - Fetch current user's TalkMindly profile state
@@ -232,7 +243,16 @@ router.get('/rooms/:roomId/notes', jwt_1.authenticateJWT, async (req, res) => {
             orderBy,
             skip,
             take: limit,
-            include: {
+            select: {
+                id: true,
+                userId: true,
+                nickname: true,
+                avatar: true,
+                content: true,
+                status: true,
+                moderationReason: true,
+                meTooCount: true,
+                createdAt: true,
                 replies: {
                     where: {
                         OR: [
@@ -241,11 +261,47 @@ router.get('/rooms/:roomId/notes', jwt_1.authenticateJWT, async (req, res) => {
                         ],
                     },
                     orderBy: { createdAt: 'asc' },
+                    select: {
+                        id: true,
+                        userId: true,
+                        nickname: true,
+                        avatar: true,
+                        content: true,
+                        status: true,
+                        moderationReason: true,
+                        createdAt: true,
+                    },
                 },
-                reactions: true,
+                reactions: { select: { id: true, userId: true, type: true } },
             },
         });
-        res.status(200).json(notes);
+        const shaped = notes.map((n) => ({
+            id: n.id,
+            nickname: n.nickname,
+            avatar: n.avatar,
+            content: n.content,
+            status: n.status,
+            moderationReason: n.moderationReason,
+            meTooCount: n.meTooCount,
+            createdAt: n.createdAt,
+            isMine: n.userId === userId,
+            replies: n.replies.map((r) => ({
+                id: r.id,
+                nickname: r.nickname,
+                avatar: r.avatar,
+                content: r.content,
+                status: r.status,
+                moderationReason: r.moderationReason,
+                createdAt: r.createdAt,
+                isMine: r.userId === userId,
+            })),
+            reactions: n.reactions.map((x) => ({
+                id: x.id,
+                type: x.type,
+                isMine: x.userId === userId,
+            })),
+        }));
+        res.status(200).json(shaped);
     }
     catch (err) {
         console.error('Error fetching notes:', err);
@@ -277,7 +333,7 @@ router.post('/rooms/:roomId/notes', jwt_1.authenticateJWT, async (req, res) => {
             return;
         }
         if (content.length > 280) {
-            res.status(400).json({ error: 'Content exceeds 280 characters' });
+            res.status(400).json({ error: 'Content exceeds 280 characters limit' });
             return;
         }
         const user = await prisma_1.default.user.findUnique({
@@ -292,7 +348,8 @@ router.post('/rooms/:roomId/notes', jwt_1.authenticateJWT, async (req, res) => {
             res.status(400).json({ error: 'You must accept the terms and set up your peer profile before posting' });
             return;
         }
-        // Save note immediately as APPROVED (released on the spot)
+        // Moderate before create
+        const moderation = await moderateBeforeCreate(content);
         const note = await prisma_1.default.talkNote.create({
             data: {
                 roomId: req.params.roomId,
@@ -300,22 +357,72 @@ router.post('/rooms/:roomId/notes', jwt_1.authenticateJWT, async (req, res) => {
                 nickname: user.talkNickname,
                 avatar: user.talkAvatar || 'panda',
                 content,
-                status: enums_1.TalkStatus.APPROVED,
-                isReported: false,
-                inputTokens: 0,
-                outputTokens: 0,
+                status: moderation.status,
+                moderationReason: moderation.moderationReason,
+                isReported: moderation.isCrisis,
+                inputTokens: moderation.inputTokens,
+                outputTokens: moderation.outputTokens,
             },
-            include: {
-                replies: true,
-                reactions: true,
+            select: {
+                id: true,
+                userId: true,
+                nickname: true,
+                avatar: true,
+                content: true,
+                status: true,
+                moderationReason: true,
+                meTooCount: true,
+                createdAt: true,
+                replies: {
+                    select: {
+                        id: true,
+                        userId: true,
+                        nickname: true,
+                        avatar: true,
+                        content: true,
+                        status: true,
+                        moderationReason: true,
+                        createdAt: true,
+                    },
+                },
+                reactions: { select: { id: true, userId: true, type: true } },
             },
         });
-        // Fire and forget safety monitoring agent asynchronously
-        runModerationAgent(note.id, note.content, 'note').catch(err => console.error('Failed to trigger async moderation agent:', err));
+        const shapedNote = {
+            id: note.id,
+            nickname: note.nickname,
+            avatar: note.avatar,
+            content: note.content,
+            status: note.status,
+            moderationReason: note.moderationReason,
+            meTooCount: note.meTooCount,
+            createdAt: note.createdAt,
+            isMine: note.userId === userId,
+            replies: note.replies.map((r) => ({
+                id: r.id,
+                nickname: r.nickname,
+                avatar: r.avatar,
+                content: r.content,
+                status: r.status,
+                moderationReason: r.moderationReason,
+                createdAt: r.createdAt,
+                isMine: r.userId === userId,
+            })),
+            reactions: note.reactions.map((x) => ({
+                id: x.id,
+                type: x.type,
+                isMine: x.userId === userId,
+            })),
+        };
+        const message = moderation.isCrisis
+            ? "What you wrote has been kept off the board for now, and someone on our team will read it. That review is not instant, and we are not an emergency service - so if you need help sooner, the people on the next page can talk to you today."
+            : moderation.status === enums_1.TalkStatus.REJECTED
+                ? "That one hasn't gone up on the board. It's on your screen with a note about why, and nobody else can see it."
+                : "Note dropped on the wall successfully.";
         res.status(201).json({
-            note,
-            isCrisis: false,
-            message: "Note dropped on the wall successfully."
+            note: shapedNote,
+            isCrisis: moderation.isCrisis,
+            message,
         });
     }
     catch (err) {
@@ -359,7 +466,8 @@ router.post('/notes/:noteId/replies', jwt_1.authenticateJWT, async (req, res) =>
             res.status(400).json({ error: 'You must accept the terms and set up your peer profile before replying' });
             return;
         }
-        // Save reply immediately as APPROVED (released on the spot)
+        // Moderate before create
+        const moderation = await moderateBeforeCreate(content);
         const reply = await prisma_1.default.talkReply.create({
             data: {
                 noteId: req.params.noteId,
@@ -367,17 +475,47 @@ router.post('/notes/:noteId/replies', jwt_1.authenticateJWT, async (req, res) =>
                 nickname: user.talkNickname,
                 avatar: user.talkAvatar || 'panda',
                 content,
-                status: enums_1.TalkStatus.APPROVED,
-                inputTokens: 0,
-                outputTokens: 0,
+                status: moderation.status,
+                moderationReason: moderation.moderationReason,
+                inputTokens: moderation.inputTokens,
+                outputTokens: moderation.outputTokens,
+            },
+            select: {
+                id: true,
+                userId: true,
+                nickname: true,
+                avatar: true,
+                content: true,
+                status: true,
+                moderationReason: true,
+                createdAt: true,
             },
         });
-        // Fire and forget safety monitoring agent asynchronously
-        runModerationAgent(reply.id, reply.content, 'reply').catch(err => console.error('Failed to trigger async moderation agent:', err));
+        if (moderation.isCrisis) {
+            await prisma_1.default.talkNote.update({
+                where: { id: req.params.noteId },
+                data: { isReported: true },
+            });
+        }
+        const shapedReply = {
+            id: reply.id,
+            nickname: reply.nickname,
+            avatar: reply.avatar,
+            content: reply.content,
+            status: reply.status,
+            moderationReason: reply.moderationReason,
+            createdAt: reply.createdAt,
+            isMine: reply.userId === userId,
+        };
+        const message = moderation.isCrisis
+            ? "What you wrote has been kept off the board for now, and someone on our team will read it. That review is not instant, and we are not an emergency service - so if you need help sooner, the people on the next page can talk to you today."
+            : moderation.status === enums_1.TalkStatus.REJECTED
+                ? "That one hasn't gone up on the board. It's on your screen with a note about why, and nobody else can see it."
+                : "Reply added.";
         res.status(201).json({
-            reply,
-            isCrisis: false,
-            message: "Reply added."
+            reply: shapedReply,
+            isCrisis: moderation.isCrisis,
+            message,
         });
     }
     catch (err) {

@@ -41,6 +41,44 @@ router.get('/rooms', authenticateJWT, async (req: Request, res: Response) => {
   }
 });
 
+// POST /rooms - Create a new TalkRoom (Admin only)
+router.post('/rooms', authenticateJWT, authorizeRoles('ADMIN'), async (req: Request, res: Response) => {
+  try {
+    const { name, description } = req.body as { name?: string; description?: string };
+    if (!name || name.trim().length === 0) {
+      res.status(400).json({ error: 'Room name is required' });
+      return;
+    }
+
+    const room = await prisma.talkRoom.create({
+      data: {
+        name: name.trim(),
+        description: description?.trim() || null,
+        isActive: true,
+      },
+    });
+
+    res.status(201).json({ success: true, room });
+  } catch (err) {
+    console.error('Error creating room:', err);
+    res.status(500).json({ error: 'Failed to create room' });
+  }
+});
+
+// DELETE /rooms/:id - Delete / Deactivate a TalkRoom (Admin only)
+router.delete('/rooms/:id', authenticateJWT, authorizeRoles('ADMIN'), async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    await prisma.talkRoom.delete({
+      where: { id: id as string },
+    });
+    res.status(200).json({ success: true });
+  } catch (err) {
+    console.error('Error deleting room:', err);
+    res.status(500).json({ error: 'Failed to delete room' });
+  }
+});
+
 // GET /profile - Fetch current user's TalkMindly profile state
 router.get('/profile', authenticateJWT, async (req: Request, res: Response) => {
   try {

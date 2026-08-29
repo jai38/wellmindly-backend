@@ -81,7 +81,12 @@ app.get('/health', (req, res) => {
     res.status(200).json({ status: 'ok', message: 'API is healthy' });
 });
 // Start background automated session reminder scheduler
-(0, reminderService_1.startReminderScheduler)();
+if (env_1.env.ENABLE_REMINDER_SCHEDULER) {
+    (0, reminderService_1.startReminderScheduler)();
+}
+else {
+    console.log('Reminder scheduler disabled (ENABLE_REMINDER_SCHEDULER=false)');
+}
 app.listen(process.env.PORT || env_1.env.PORT, () => {
     console.log(`Server is running on port ${env_1.env.PORT}`);
 });

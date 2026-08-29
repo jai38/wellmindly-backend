@@ -353,32 +353,25 @@ async function main() {
   }
 
   // 2. Create 1 mock university conditionally
-  let university = await prisma.university.findFirst({
-    where: { domain: 'wellmindly.com' }
+  // `name` and `domain` are both @unique, and this row has existed under
+  // wellmindly.edu on older databases. Looking up by domain and then creating by
+  // name meant the create collided on `name` and aborted the whole seed, so the
+  // lookup key has to be the same key we create with.
+  const university = await prisma.university.upsert({
+    where: { name: 'Wellmindly University' },
+    update: { verified: true },
+    create: {
+      name: 'Wellmindly University',
+      domain: 'wellmindly.com',
+      verified: true,
+    },
   });
-  if (!university) {
-    university = await prisma.university.create({
-      data: {
-        name: 'Wellmindly University',
-        domain: 'wellmindly.com',
-        verified: true,
-      },
-    });
-  }
   console.log(`✅ University: ${university.name} (id: ${university.id})`);
 
-  let universityCom = await prisma.university.findFirst({
-    where: { domain: 'wellmindly.com' }
-  });
-  if (!universityCom) {
-    universityCom = await prisma.university.create({
-      data: {
-        name: 'Wellmindly University Com',
-        domain: 'wellmindly.com',
-        verified: true,
-      },
-    });
-  }
+  // Kept deliberately: the block that used to be here looked up the same domain
+  // the row above had just taken, so it never created a second university and
+  // every consumer below already resolved to this one.
+  const universityCom = university;
   console.log(`✅ University Com: ${universityCom.name} (id: ${universityCom.id})`);
 
   // 3. Create 5 mock student accounts conditionally
@@ -706,6 +699,91 @@ async function main() {
 
       console.log(`ℹ️ Updated Counselor ${cData.email} profile, password & availability (08:00 - 18:00 UTC).`);
     }
+  }
+
+  // 8. Demo-shaped operational data.
+  //
+  // Everything above seeds accounts and catalogue rows, which left sessions,
+  // notes, both feedback tables, check-ins, TalkMindly content, contact
+  // requests, notifications, audit logs and invitations empty on every fresh
+  // database. The counselor Sessions page, the admin KPIs and the moderation
+  // queue then render blank, which is indistinguishable from broken.
+  //
+  // Fixed ids keep this idempotent: re-running upserts the same rows rather
+  // than stacking new ones.
+  console.log('\n🌱 Seeding demo sessions, feedback, check-ins and activity...');
+
+  const DEMO = (n: number) => `d0000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+
+  const byEmail = async (email: string) =>
+    prisma.user.findUnique({ where: { email } });
+
+  const profileFor = async (email: string) => {
+    const u = await byEmail(email);
+    if (!u) return null;
+    return prisma.counselorProfile.findUnique({ where: { userId: u.id } });
+  };
+
+  const [alice, bob, carol, adminUser] = await Promise.all([
+    byEmail('alice@wellmindly.com'),
+    byEmail('bob@wellmindly.com'),
+    byEmail('carol@wellmindly.com'),
+    byEmail('admin@wellmindly.com'),
+  ]);
+  const [vinayak, kriti] = await Promise.all([
+    profileFor('vinayakkatyayan@wellmindly.com'),
+    profileFor('kritisapra@wellmindly.com'),
+  ]);
+
+  if (!alice || !bob || !carol || !adminUser || !vinayak || !kriti) {
+    console.log('⚠️  Skipping demo activity: expected seed accounts are missing.');
+  } else {
+    const hoursFromNow = (h: number) => new Date(Date.now() + h * 60 * 60 * 1000);
+    const jitsi = (n: number) => `https://meet.jit.si/wellmindly-counseling-${DEMO(n)}`;
+
+    // Six sessions covering the statuses the portals actually branch on: two
+    // finished ones to hang notes and feedback off, one upcoming confirmed one
+    // for the "next session" cards, one pending request, one cancellation and
+    // one no-show so the counselor and admin stats are not uniformly perfect.
+    // The confirmed session sits 26 h out, deliberately outside the reminder
+    // service's 24 h band, so a scheduler left on cannot mail anyone.
+    const sessions = [
+      { n: 1, studentId: alice.id, counselorId: vinayak.id, startsIn: -7 * 24, status: 'COMPLETED' as const },
+      { n: 2, studentId: bob.id, counselorId: vinayak.id, startsIn: -3 * 24, status: 'COMPLETED' as const },
+      { n: 3, studentId: alice.id, counselorId: vinayak.id, startsIn: 26, status: 'CONFIRMED' as const },
+      { n: 4, studentId: carol.id, counselorId: kriti.id, startsIn: 3 * 24, status: 'PENDING' as const },
+      {
+        n: 5,
+        studentId: bob.id,
+        counselorId: kriti.id,
+        startsIn: -2 * 24,
+        status: 'CANCELLED_BY_STUDENT' as const,
+        cancellationReason: 'Clashed with a rescheduled lab session.',
+      },
+      { n: 6, studentId: carol.id, counselorId: vinayak.id, startsIn: -5 * 24, status: 'NO_SHOW' as const },
+    ];
+
+    for (const s of sessions) {
+      const startTime = hoursFromNow(s.startsIn);
+      const endTime = new Date(startTime.getTime() + 60 * 60 * 1000);
+      await prisma.counselorSession.upsert({
+        where: { id: DEMO(s.n) },
+        update: { startTime, endTime, status: s.status },
+        create: {
+          id: DEMO(s.n),
+          studentId: s.studentId,
+          counselorId: s.counselorId,
+          startTime,
+          endTime,
+          status: s.status,
+          meetingLink: jitsi(s.n),
+          cancellationReason: s.cancellationReason ?? null,
+        },
+      });
+    }
+    console.log(`✅ Sessions: ${sessions.length} across COMPLETED / CONFIRMED / PENDING / CANCELLED / NO_SHOW`);
+
+    // DEMO_ACTIVITY_PLACEHOLDER
   }
 
   console.log('\n🎉 Seeding complete!');

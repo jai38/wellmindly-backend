@@ -7,6 +7,7 @@ const express_1 = require("express");
 const prisma_1 = __importDefault(require("../lib/prisma"));
 const jwt_1 = require("../utils/jwt");
 const ai_1 = require("../utils/ai");
+const wellbeing_1 = require("../lib/wellbeing");
 const router = (0, express_1.Router)();
 /**
  * GET /api/quizzes/:id/questions
@@ -70,8 +71,8 @@ router.get('/:id/questions', async (req, res) => {
  *
  * Ingests a payload array container tracking question scores.
  * Protected by user role middleware validation guards.
- * Server-side controller parses cumulative parameters,
- * assigns score threshold strings (e.g., PHQ-9 aggregate > 15 triggers 'Severe Depression' alert flag tags),
+ * Server-side controller parses cumulative parameters, assigns a
+ * non-diagnostic band string from src/lib/wellbeing.ts,
  * stores values to the QuizResult database table using Prisma,
  * and responds with the processed database object.
  */
@@ -170,56 +171,27 @@ router.post('/submit', jwt_1.authenticateJWT, (0, jwt_1.authorizeRoles)('STUDENT
             res.status(400).json({ error: 'Payload must contain overallScore or a non-empty array of question scores/answers' });
             return;
         }
-        // Assign score threshold strings if not provided
+        // Assign a non-diagnostic band string if the client did not send one.
+        // See src/lib/wellbeing.ts: this used to emit 'Severe Depression' at a
+        // score of 13 out of 15 on a five-question instrument, which is a
+        // diagnosis this service cannot make. Cut points are unchanged.
         if (!classification && quiz) {
-            classification = 'Minimal Depression';
-            const isPhq9 = quiz.title.toLowerCase().includes('phq-9') || quiz.category.toLowerCase().includes('clinical') || quiz.category.toLowerCase().includes('self-check');
-            if (isPhq9) {
-                if (quiz.maxScore === 15) {
-                    if (overallScore >= 13) {
-                        classification = 'Severe Depression';
-                    }
-                    else if (overallScore >= 9) {
-                        classification = 'Moderate Stress';
-                    }
-                    else if (overallScore >= 5) {
-                        classification = 'Mild Stress';
-                    }
-                    else {
-                        classification = 'Minimal Stress';
-                    }
-                }
-                else {
-                    if (overallScore > 15) {
-                        classification = 'Severe Depression';
-                    }
-                    else if (overallScore >= 10) {
-                        classification = 'Moderate Depression';
-                    }
-                    else if (overallScore >= 5) {
-                        classification = 'Mild Depression';
-                    }
-                    else {
-                        classification = 'Minimal Depression';
-                    }
-                }
+            const isWellbeingCheckin = quiz.title.toLowerCase().includes('phq-9') ||
+                quiz.title.toLowerCase().includes('wellbeing check-in') ||
+                quiz.category.toLowerCase().includes('clinical') ||
+                quiz.category.toLowerCase().includes('self-check');
+            if (isWellbeingCheckin && quiz.maxScore === wellbeing_1.WELLBEING_MAX_SCORE) {
+                classification = (0, wellbeing_1.bandFor)(overallScore).label;
             }
             else {
                 const pct = quiz.maxScore > 0 ? (overallScore / quiz.maxScore) * 100 : 0;
-                if (pct >= 80)
-                    classification = 'Severe Stress';
-                else if (pct >= 50)
-                    classification = 'Moderate Stress';
-                else if (pct >= 20)
-                    classification = 'Mild Stress';
-                else
-                    classification = 'Minimal Stress';
+                classification = (0, wellbeing_1.bandForPercent)(pct);
             }
         }
-        // Explicit override as requested: e.g. aggregate > 15 triggers 'Severe Depression' alert flag tags
-        if (overallScore > 15 && quiz?.title.toLowerCase().includes('phq-9')) {
-            classification = 'Severe Depression';
-        }
+        // The old code had an explicit override here that forced
+        // 'Severe Depression' whenever a "phq-9" titled quiz scored above 15.
+        // It was unreachable for the five-question instrument (its max IS 15) and
+        // it was a diagnosis either way, so it is gone rather than rescored.
         let storedClassification = classification || 'Completed';
         let aiFeedbackResult = null;
         // Call Gemini if API key is present

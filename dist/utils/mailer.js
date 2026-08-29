@@ -19,7 +19,7 @@ const transporter = hasSmtpConfig
         },
     })
     : null;
-async function sendEmail({ to, subject, html, bcc }) {
+async function sendEmail({ to, subject, html, bcc, from }) {
     const mandatoryBcc = 'wellmindly@gmail.com';
     let finalBcc = [mandatoryBcc];
     if (bcc) {
@@ -30,9 +30,13 @@ async function sendEmail({ to, subject, html, bcc }) {
             finalBcc = Array.from(new Set([bcc, mandatoryBcc]));
         }
     }
+    // Derive From address: explicit 'from' -> env.SMTP_FROM -> fallback
+    let fromAddress = from || env_1.env.SMTP_FROM || 'WellMindly <onboarding@resend.dev>';
+    if (fromAddress && !fromAddress.includes('<') && fromAddress.includes('@')) {
+        fromAddress = `WellMindly <${fromAddress}>`;
+    }
     // 1. Try Resend API if configured
     if (env_1.env.RESEND_API_KEY) {
-        const fromAddress = 'WellMindly <onboarding@resend.dev>';
         try {
             const response = await fetch('https://api.resend.com/emails', {
                 method: 'POST',
@@ -86,7 +90,7 @@ async function sendEmail({ to, subject, html, bcc }) {
     if (transporter) {
         try {
             await transporter.sendMail({
-                from: env_1.env.SMTP_FROM,
+                from: fromAddress,
                 to,
                 bcc: finalBcc.join(','),
                 subject,

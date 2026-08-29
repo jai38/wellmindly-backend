@@ -11,6 +11,13 @@ vitest_1.vi.mock('../utils/mailer', () => ({
     sendEmail: vitest_1.vi.fn().mockResolvedValue(true),
     getOtpTemplate: vitest_1.vi.fn().mockReturnValue('<html>MOCK OTP</html>'),
 }));
+vitest_1.vi.mock('../lib/prisma', () => ({
+    default: {
+        user: {
+            findUnique: vitest_1.vi.fn().mockResolvedValue(null),
+        },
+    },
+}));
 (0, vitest_1.describe)('Auth API Routes', () => {
     (0, vitest_1.describe)('POST /api/auth/send-otp', () => {
         (0, vitest_1.it)('should fail if email is not provided', async () => {

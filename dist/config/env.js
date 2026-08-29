@@ -18,11 +18,19 @@ const envSchema = zod_1.z.object({
     SMTP_USER: zod_1.z.string().optional(),
     SMTP_PASS: zod_1.z.string().optional(),
     SMTP_FROM: zod_1.z.string().optional().default('info@wellmindly.com'),
+    CONTACT_NOTIFY_TO: zod_1.z.string().optional().default('info@wellmindly.com'),
     RESEND_API_KEY: zod_1.z.string().optional(),
     GEMINI_API_KEY: zod_1.z.string().optional(),
     GEMINI_MODEL: zod_1.z.string().optional().default('gemini-3.5-flash'),
     ALLOWED_ORIGINS: zod_1.z.string().optional().default('http://localhost:5173,http://localhost:5174,http://localhost:5175,https://wellmindly.com,https://admin.wellmindly.com,https://counselor.wellmindly.com,https://university.wellmindly.com,https://www.wellmindly.com,http://localhost,capacitor://localhost'),
     CHAT_SESSION_MAX_REQUESTS: zod_1.z.coerce.number().default(100),
+    // Set to 'false' on a developer machine so a local boot never mails real
+    // students and counselors. Absent means on, so deployed behaviour is unchanged.
+    ENABLE_REMINDER_SCHEDULER: zod_1.z
+        .string()
+        .optional()
+        .default('true')
+        .transform((v) => v.toLowerCase() !== 'false'),
     AWS_REGION: zod_1.z.string().optional().default('us-east-1'),
     AWS_S3_BUCKET: zod_1.z.string().optional().default('wellmindly-assets'),
     AWS_ACCESS_KEY_ID: zod_1.z.string().optional(),

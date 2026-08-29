@@ -362,6 +362,54 @@ router.get(
 );
 
 /**
+ * GET /api/admin/quiz-results/:id
+ * Retrieves detailed quiz submission with quiz questions and user info.
+ */
+router.get(
+  '/quiz-results/:id',
+  authenticateJWT,
+  authorizeRoles('ADMIN'),
+  async (req: Request, res: Response) => {
+    try {
+      const id = req.params.id as string;
+      const quizResult = await prisma.quizResult.findUnique({
+        where: { id },
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              firstName: true,
+              lastName: true,
+            },
+          },
+          quiz: {
+            include: {
+              questions: {
+                include: {
+                  options: true,
+                },
+                orderBy: { index: 'asc' },
+              },
+            },
+          },
+          feedback: true,
+        },
+      });
+
+      if (!quizResult) {
+        return res.status(404).json({ error: 'Quiz result not found' });
+      }
+
+      res.status(200).json({ quizResult });
+    } catch (error) {
+      console.error('Error fetching quiz result details:', error);
+      res.status(500).json({ error: 'Failed to fetch quiz result details' });
+    }
+  }
+);
+
+/**
  * GET /api/admin/talk/metrics
  * Calculate AI tokens cost and moderation metrics.
  */
