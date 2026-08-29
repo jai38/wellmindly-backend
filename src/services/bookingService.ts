@@ -3,6 +3,7 @@ import prisma from '../lib/prisma';
 import { generateBookableSlots } from './slotGenerator';
 import { queueEmail } from '../utils/emailQueue';
 import { logAuditEvent } from '../utils/auditLogger';
+import { escapeHtml } from '../utils/escapeHtml';
 
 export interface BookSessionParams {
   studentId: string;
@@ -132,11 +133,11 @@ export async function bookSessionTransaction(params: BookSessionParams) {
       html: `
         <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b;">
           <h2 style="color: #4f46e5;">Session Booking Confirmed</h2>
-          <p>Hello <strong>${student.firstName}</strong>,</p>
-          <p>Your session with <strong>${counselor.user.firstName} ${counselor.user.lastName}</strong> has been successfully booked.</p>
+          <p>Hello <strong>${escapeHtml(student.firstName)}</strong>,</p>
+          <p>Your session with <strong>${escapeHtml(counselor.user.firstName)} ${escapeHtml(counselor.user.lastName)}</strong> has been successfully booked.</p>
           <div style="background-color: #f8fafc; padding: 16px; border-radius: 8px; border-left: 4px solid #4f46e5; margin: 20px 0;">
             <p style="margin: 4px 0;"><strong>Date & Time (UTC):</strong> ${formattedTime}</p>
-            <p style="margin: 4px 0;"><strong>Counselor:</strong> ${counselor.user.firstName} ${counselor.user.lastName} (${counselor.credentials})</p>
+            <p style="margin: 4px 0;"><strong>Counselor:</strong> ${escapeHtml(counselor.user.firstName)} ${escapeHtml(counselor.user.lastName)} (${escapeHtml(counselor.credentials)})</p>
           </div>
           <p>
             <a href="${meetingLink}" style="background-color: #4f46e5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">Join Video Meeting</a>
@@ -152,8 +153,8 @@ export async function bookSessionTransaction(params: BookSessionParams) {
       html: `
         <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b;">
           <h2 style="color: #4f46e5;">New Session Scheduled</h2>
-          <p>Hello <strong>${counselor.user.firstName}</strong>,</p>
-          <p>Student <strong>${student.firstName} ${student.lastName}</strong> has booked a counseling session with you.</p>
+          <p>Hello <strong>${escapeHtml(counselor.user.firstName)}</strong>,</p>
+          <p>Student <strong>${escapeHtml(student.firstName)} ${escapeHtml(student.lastName)}</strong> has booked a counseling session with you.</p>
           <p><strong>Scheduled UTC Time:</strong> ${formattedTime}</p>
           <p><a href="${meetingLink}" style="background-color: #4f46e5; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; display: inline-block;">Open Video Meeting Room</a></p>
         </div>

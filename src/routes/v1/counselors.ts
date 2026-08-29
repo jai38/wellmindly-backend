@@ -7,6 +7,7 @@ import { sendSuccess, sendError } from '../../utils/response';
 import { queueEmail } from '../../utils/emailQueue';
 import { logAuditEvent } from '../../utils/auditLogger';
 import { uploadToS3 } from '../../utils/s3';
+import { escapeHtml } from '../../utils/escapeHtml';
 
 const router = Router();
 
@@ -600,7 +601,22 @@ router.post('/me/students/:studentId/send-email', async (req: AuthenticatedReque
     return;
   }
 
-  const student = await prisma.user.findUnique({ where: { id: studentId } });
+  const profile = await prisma.counselorProfile.findUnique({ where: { userId: req.user?.sub } });
+  if (!profile) {
+    sendError(res, 'NOT_FOUND', 'Profile not found', 404);
+    return;
+  }
+
+  // Same scoping rule as the timeline route above. A plain findUnique on the id
+  // let any counselor send a WellMindly-branded "message from your counselor" to
+  // any user in the database - students they have never met, other counselors,
+  // admins - as long as they knew a uuid.
+  const student = await prisma.user.findFirst({
+    where: {
+      id: studentId,
+      studentSessions: { some: { counselorId: profile.id, deletedAt: null } },
+    },
+  });
   if (!student) {
     sendError(res, 'NOT_FOUND', 'Student not found', 404);
     return;
@@ -612,9 +628,9 @@ router.post('/me/students/:studentId/send-email', async (req: AuthenticatedReque
     html: `
       <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b;">
         <h3 style="color: #4f46e5;">Message from WellMindly Counselor</h3>
-        <p>Hello ${student.firstName},</p>
-        <div style="background-color: #f8fafc; padding: 16px; border-radius: 8px; margin: 16px 0;">
-          ${message}
+        <p>Hello ${escapeHtml(student.firstName)},</p>
+        <div style="background-color: #f8fafc; padding: 16px; border-radius: 8px; margin: 16px 0; white-space: pre-wrap;">
+          ${escapeHtml(message)}
         </div>
       </div>
     `,

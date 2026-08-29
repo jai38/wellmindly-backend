@@ -5,6 +5,7 @@ import { authenticateJWT, requireRoles, AuthenticatedRequest } from '../../middl
 import { sendSuccess, sendError } from '../../utils/response';
 import { sendEmail } from '../../utils/mailer';
 import { logAuditEvent } from '../../utils/auditLogger';
+import { escapeHtml } from '../../utils/escapeHtml';
 
 const router = Router();
 
@@ -66,7 +67,7 @@ router.post('/counselors/invite', async (req: AuthenticatedRequest, res: Respons
     html: `
       <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px;">
         <h2 style="color: #4f46e5; margin-top: 0;">Welcome to WellMindly</h2>
-        <p>Hello <strong>${firstName} ${lastName}</strong>,</p>
+        <p>Hello <strong>${escapeHtml(firstName)} ${escapeHtml(lastName)}</strong>,</p>
         <p>You have been invited to join the WellMindly team as a professional counselor.</p>
         <p>Please click the button below to complete your registration, set up your password, and define your profile:</p>
         <p style="margin: 28px 0;">

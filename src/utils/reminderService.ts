@@ -1,5 +1,6 @@
 import prisma from '../lib/prisma';
 import { queueEmail } from './emailQueue';
+import { escapeHtml } from './escapeHtml';
 
 export function startReminderScheduler(): void {
   // Check reminders every 5 minutes
@@ -64,8 +65,8 @@ function sendSessionReminder(session: any, windowText: string): void {
     html: `
       <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b;">
         <h2 style="color: #4f46e5;">Upcoming Counseling Session</h2>
-        <p>Hello <strong>${session.student.firstName}</strong>,</p>
-        <p>Your session with <strong>${session.counselor.user.firstName} ${session.counselor.user.lastName}</strong> starts in <strong>${windowText}</strong>.</p>
+        <p>Hello <strong>${escapeHtml(session.student.firstName)}</strong>,</p>
+        <p>Your session with <strong>${escapeHtml(session.counselor.user.firstName)} ${escapeHtml(session.counselor.user.lastName)}</strong> starts in <strong>${windowText}</strong>.</p>
         <p style="margin: 20px 0;">
           <a href="${meetingLink}" style="background-color: #4f46e5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">Join Video Call</a>
         </p>
@@ -81,8 +82,8 @@ function sendSessionReminder(session: any, windowText: string): void {
     html: `
       <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b;">
         <h2 style="color: #4f46e5;">Upcoming Student Session</h2>
-        <p>Hello <strong>${session.counselor.user.firstName}</strong>,</p>
-        <p>Your counseling session with <strong>${session.student.firstName} ${session.student.lastName}</strong> starts in <strong>${windowText}</strong>.</p>
+        <p>Hello <strong>${escapeHtml(session.counselor.user.firstName)}</strong>,</p>
+        <p>Your counseling session with <strong>${escapeHtml(session.student.firstName)} ${escapeHtml(session.student.lastName)}</strong> starts in <strong>${windowText}</strong>.</p>
         <p style="margin: 20px 0;">
           <a href="${meetingLink}" style="background-color: #4f46e5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">Launch Meeting Room</a>
         </p>

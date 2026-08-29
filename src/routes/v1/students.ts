@@ -6,6 +6,7 @@ import { generateBookableSlots } from '../../services/slotGenerator';
 import { bookSessionTransaction } from '../../services/bookingService';
 import { logAuditEvent } from '../../utils/auditLogger';
 import { queueEmail } from '../../utils/emailQueue';
+import { escapeHtml } from '../../utils/escapeHtml';
 
 const router = Router();
 
@@ -231,12 +232,12 @@ router.post('/sessions/:id/cancel', async (req: AuthenticatedRequest, res: Respo
     html: `
       <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b;">
         <h2 style="color: #4f46e5;">Counseling Session Cancelled</h2>
-        <p>Hello <strong>${session.student.firstName}</strong>,</p>
-        <p>Your session with <strong>${session.counselor.user.firstName} ${session.counselor.user.lastName}</strong> has been cancelled.</p>
+        <p>Hello <strong>${escapeHtml(session.student.firstName)}</strong>,</p>
+        <p>Your session with <strong>${escapeHtml(session.counselor.user.firstName)} ${escapeHtml(session.counselor.user.lastName)}</strong> has been cancelled.</p>
         <div style="background-color: #f8fafc; padding: 16px; border-radius: 8px; border-left: 4px solid #4f46e5; margin: 20px 0;">
           <p style="margin: 4px 0;"><strong>Date & Time (UTC):</strong> ${formattedTime}</p>
-          <p style="margin: 4px 0;"><strong>Counselor:</strong> ${session.counselor.user.firstName} ${session.counselor.user.lastName}</p>
-          <p style="margin: 4px 0;"><strong>Reason:</strong> ${studentReason}</p>
+          <p style="margin: 4px 0;"><strong>Counselor:</strong> ${escapeHtml(session.counselor.user.firstName)} ${escapeHtml(session.counselor.user.lastName)}</p>
+          <p style="margin: 4px 0;"><strong>Reason:</strong> ${escapeHtml(studentReason)}</p>
         </div>
         <p style="color: #64748b; font-size: 14px;">You can book another session whenever you are ready.</p>
       </div>
@@ -250,8 +251,8 @@ router.post('/sessions/:id/cancel', async (req: AuthenticatedRequest, res: Respo
     html: `
       <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b;">
         <h2 style="color: #4f46e5;">Session Cancelled by Student</h2>
-        <p>Hello <strong>${session.counselor.user.firstName}</strong>,</p>
-        <p>Student <strong>${session.student.firstName} ${session.student.lastName}</strong> has cancelled their scheduled session.</p>
+        <p>Hello <strong>${escapeHtml(session.counselor.user.firstName)}</strong>,</p>
+        <p>Student <strong>${escapeHtml(session.student.firstName)} ${escapeHtml(session.student.lastName)}</strong> has cancelled their scheduled session.</p>
         <div style="background-color: #f8fafc; padding: 16px; border-radius: 8px; border-left: 4px solid #4f46e5; margin: 20px 0;">
           <p style="margin: 4px 0;"><strong>Cancelled Time (UTC):</strong> ${formattedTime}</p>
         </div>

@@ -5,6 +5,7 @@ import prisma from '../lib/prisma';
 import { authenticateJWT, authorizeRoles } from '../utils/jwt';
 import { sendEmail } from '../utils/mailer';
 import { queueEmail } from '../utils/emailQueue';
+import { escapeHtml } from '../utils/escapeHtml';
 import { env } from '../config/env';
 
 const router = Router();
@@ -48,8 +49,8 @@ router.post('/general', async (req: Request, res: Response) => {
       html: `
         <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b;">
           <h2 style="color: #4f46e5;">Message Received</h2>
-          <p>Hello <strong>${data.name}</strong>,</p>
-          <p>Thank you for reaching out to WellMindly. We have received your message regarding <strong>${data.subject || 'General Inquiry'}</strong> and a member of our team will review it.</p>
+          <p>Hello <strong>${escapeHtml(data.name)}</strong>,</p>
+          <p>Thank you for reaching out to WellMindly. We have received your message regarding <strong>${escapeHtml(data.subject || 'General Inquiry')}</strong> and a member of our team will review it.</p>
           <p style="color: #64748b; font-size: 14px; margin-top: 20px;">WellMindly Student Support Team</p>
         </div>
       `,
@@ -62,10 +63,10 @@ router.post('/general', async (req: Request, res: Response) => {
       html: `
         <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b;">
           <h2 style="color: #4f46e5;">New Contact Request</h2>
-          <p><strong>From:</strong> ${data.name} (${data.email})</p>
-          <p><strong>Subject:</strong> ${data.subject || 'N/A'}</p>
+          <p><strong>From:</strong> ${escapeHtml(data.name)} (${escapeHtml(data.email)})</p>
+          <p><strong>Subject:</strong> ${escapeHtml(data.subject || 'N/A')}</p>
           <div style="background-color: #f8fafc; padding: 16px; border-radius: 8px; border-left: 4px solid #4f46e5; margin: 16px 0;">
-            <p style="white-space: pre-wrap; margin: 0;">${data.message}</p>
+            <p style="white-space: pre-wrap; margin: 0;">${escapeHtml(data.message)}</p>
           </div>
         </div>
       `,
@@ -94,8 +95,8 @@ router.post('/university', async (req: Request, res: Response) => {
       html: `
         <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b;">
           <h2 style="color: #4f46e5;">University Onboarding Request Received</h2>
-          <p>Hello <strong>${data.name}</strong>,</p>
-          <p>Thank you for your interest in bringing WellMindly to <strong>${data.universityName}</strong>. Our partnerships team has received your request and will review your institution's details.</p>
+          <p>Hello <strong>${escapeHtml(data.name)}</strong>,</p>
+          <p>Thank you for your interest in bringing WellMindly to <strong>${escapeHtml(data.universityName)}</strong>. Our partnerships team has received your request and will review your institution's details.</p>
           <p style="color: #64748b; font-size: 14px; margin-top: 20px;">WellMindly University Partnerships</p>
         </div>
       `,
@@ -108,12 +109,12 @@ router.post('/university', async (req: Request, res: Response) => {
       html: `
         <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b;">
           <h2 style="color: #4f46e5;">New University Onboarding Request</h2>
-          <p><strong>Contact:</strong> ${data.name} (${data.email})</p>
-          <p><strong>University:</strong> ${data.universityName}</p>
-          <p><strong>Role:</strong> ${data.role}</p>
-          <p><strong>Phone:</strong> ${data.phone || 'N/A'}</p>
+          <p><strong>Contact:</strong> ${escapeHtml(data.name)} (${escapeHtml(data.email)})</p>
+          <p><strong>University:</strong> ${escapeHtml(data.universityName)}</p>
+          <p><strong>Role:</strong> ${escapeHtml(data.role)}</p>
+          <p><strong>Phone:</strong> ${escapeHtml(data.phone || 'N/A')}</p>
           <div style="background-color: #f8fafc; padding: 16px; border-radius: 8px; border-left: 4px solid #4f46e5; margin: 16px 0;">
-            <p style="white-space: pre-wrap; margin: 0;">${data.message}</p>
+            <p style="white-space: pre-wrap; margin: 0;">${escapeHtml(data.message)}</p>
           </div>
         </div>
       `,
@@ -142,8 +143,8 @@ router.post('/counselor', async (req: Request, res: Response) => {
       html: `
         <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b;">
           <h2 style="color: #4f46e5;">Counselor Application Received</h2>
-          <p>Hello <strong>${data.name}</strong>,</p>
-          <p>Thank you for applying to join the WellMindly counselor network. We have received your application with credentials (<strong>${data.credentials}</strong>) and our clinical review team will assess your submission.</p>
+          <p>Hello <strong>${escapeHtml(data.name)}</strong>,</p>
+          <p>Thank you for applying to join the WellMindly counselor network. We have received your application with credentials (<strong>${escapeHtml(data.credentials)}</strong>) and our clinical review team will assess your submission.</p>
           <p style="color: #64748b; font-size: 14px; margin-top: 20px;">WellMindly Clinical Operations</p>
         </div>
       `,
@@ -156,14 +157,14 @@ router.post('/counselor', async (req: Request, res: Response) => {
       html: `
         <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b;">
           <h2 style="color: #4f46e5;">New Counselor Application</h2>
-          <p><strong>Applicant:</strong> ${data.name} (${data.email})</p>
-          <p><strong>Phone:</strong> ${data.phone || 'N/A'}</p>
-          <p><strong>Credentials:</strong> ${data.credentials}</p>
+          <p><strong>Applicant:</strong> ${escapeHtml(data.name)} (${escapeHtml(data.email)})</p>
+          <p><strong>Phone:</strong> ${escapeHtml(data.phone || 'N/A')}</p>
+          <p><strong>Credentials:</strong> ${escapeHtml(data.credentials)}</p>
           <div style="background-color: #f8fafc; padding: 16px; border-radius: 8px; border-left: 4px solid #4f46e5; margin: 16px 0;">
             <p><strong>Experience:</strong></p>
-            <p style="white-space: pre-wrap; margin: 0 0 12px 0;">${data.experience}</p>
+            <p style="white-space: pre-wrap; margin: 0 0 12px 0;">${escapeHtml(data.experience)}</p>
             <p><strong>Message / Statement:</strong></p>
-            <p style="white-space: pre-wrap; margin: 0;">${data.message}</p>
+            <p style="white-space: pre-wrap; margin: 0;">${escapeHtml(data.message)}</p>
           </div>
         </div>
       `,
