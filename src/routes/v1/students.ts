@@ -122,8 +122,35 @@ router.post('/sessions/book', async (req: AuthenticatedRequest, res: Response) =
 
     sendSuccess(res, session, 201);
   } catch (err: any) {
-    if (err.message === 'SLOT_ALREADY_BOOKED') {
-      sendError(res, 'SLOT_ALREADY_BOOKED', 'Selected slot is no longer available. Please select another slot.', 409);
+    // bookSessionTransaction throws a bare code; each one gets a message the
+    // booking UI can show as-is.
+    const messages: Record<string, { status: number; message: string }> = {
+      SLOT_ALREADY_BOOKED: {
+        status: 409,
+        message: 'Selected slot is no longer available. Please select another slot.',
+      },
+      SLOT_BLOCKED: {
+        status: 409,
+        message: 'The counselor is no longer available at that time. Please select another slot.',
+      },
+      SLOT_IN_THE_PAST: {
+        status: 400,
+        message: 'That time has already passed. Please choose an upcoming slot.',
+      },
+      SLOT_NOT_OFFERED: {
+        status: 400,
+        message: 'That time is not one of the counselor’s bookable slots. Please pick a slot from the list.',
+      },
+      INVALID_TIME_RANGE: { status: 400, message: 'The session start and end times are not valid.' },
+      COUNSELOR_NOT_AVAILABLE: {
+        status: 409,
+        message: 'That counselor is not currently accepting sessions.',
+      },
+    };
+
+    const mapped = messages[err?.message as string];
+    if (mapped) {
+      sendError(res, err.message, mapped.message, mapped.status);
     } else {
       sendError(res, 'BOOKING_FAILED', err.message || 'Failed to book session', 400);
     }
@@ -259,6 +286,15 @@ router.post('/sessions/:id/feedback', async (req: AuthenticatedRequest, res: Res
 
   if (!session) {
     sendError(res, 'NOT_FOUND', 'Session not found', 404);
+    return;
+  }
+
+  // StudentFeedback.sessionId is @unique. Without this check a second submit
+  // reaches Prisma and comes back as a generic "that value is already taken",
+  // which is not something to show in a feedback form.
+  const existing = await prisma.studentFeedback.findUnique({ where: { sessionId } });
+  if (existing) {
+    sendError(res, 'ALREADY_EXISTS', 'You have already left feedback for this session', 409);
     return;
   }
 

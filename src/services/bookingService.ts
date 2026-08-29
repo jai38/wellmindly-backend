@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import prisma from '../lib/prisma';
+import { generateBookableSlots } from './slotGenerator';
 import { queueEmail } from '../utils/emailQueue';
 import { logAuditEvent } from '../utils/auditLogger';
 
@@ -25,7 +26,48 @@ export async function bookSessionTransaction(params: BookSessionParams) {
       throw new Error('COUNSELOR_NOT_AVAILABLE');
     }
 
+    // 1b. The requested window has to make sense on its own terms. Without this,
+    // a reversed or zero-length interval is accepted and stored, and the overlap
+    // check below can never match it again.
+    if (
+      Number.isNaN(startTimeUtc.getTime()) ||
+      Number.isNaN(endTimeUtc.getTime()) ||
+      endTimeUtc <= startTimeUtc
+    ) {
+      throw new Error('INVALID_TIME_RANGE');
+    }
+
+    if (startTimeUtc.getTime() <= Date.now()) {
+      throw new Error('SLOT_IN_THE_PAST');
+    }
+
+    // 1c. The window must be one the slot generator actually offers. The client
+    // posts back a slot it was given, so an exact match is the right test; it
+    // rejects unaligned starts, arbitrary durations, hours outside the
+    // counselor's availability and hours the counselor has blocked out - none of
+    // which were checked server-side before.
+    const dayStart = new Date(
+      Date.UTC(startTimeUtc.getUTCFullYear(), startTimeUtc.getUTCMonth(), startTimeUtc.getUTCDate(), 0, 0, 0)
+    );
+    const dayEnd = new Date(
+      Date.UTC(startTimeUtc.getUTCFullYear(), startTimeUtc.getUTCMonth(), startTimeUtc.getUTCDate(), 23, 59, 59)
+    );
+    const slots = await generateBookableSlots(counselorId, dayStart, dayEnd);
+    const match = slots.find(
+      (s) =>
+        new Date(s.startTime).getTime() === startTimeUtc.getTime() &&
+        new Date(s.endTime).getTime() === endTimeUtc.getTime()
+    );
+
+    if (!match) {
+      throw new Error('SLOT_NOT_OFFERED');
+    }
+    if (!match.isAvailable) {
+      throw new Error(match.reason === 'BLOCKED_BY_COUNSELOR' ? 'SLOT_BLOCKED' : 'SLOT_ALREADY_BOOKED');
+    }
+
     // 2. Concurrency Lock: Atomic check for overlapping active sessions
+
     const conflictingSession = await tx.counselorSession.findFirst({
       where: {
         counselorId,

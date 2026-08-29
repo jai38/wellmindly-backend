@@ -657,6 +657,14 @@ router.post('/me/sessions/:id/feedback', async (req: AuthenticatedRequest, res: 
     return;
   }
 
+  // The student-facing feedback endpoint already validates this range; the
+  // counselor side used to coerce with `rating || 5`, which turned a 0 into a 5
+  // and let 99 through into the average the admin dashboard displays.
+  if (rating !== undefined && (!Number.isInteger(rating) || rating < 1 || rating > 5)) {
+    sendError(res, 'INVALID_INPUT', 'Rating must be an integer between 1 and 5', 400);
+    return;
+  }
+
   // CounselorFeedback.sessionId is @unique, so a second submit for the same
   // session used to escape as an unhandled Prisma error - which Express served
   // as an HTML stack trace containing absolute file paths.
