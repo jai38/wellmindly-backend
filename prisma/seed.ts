@@ -738,7 +738,26 @@ async function main() {
   if (!alice || !bob || !carol || !adminUser || !vinayak || !kriti) {
     console.log('⚠️  Skipping demo activity: expected seed accounts are missing.');
   } else {
-    const hoursFromNow = (h: number) => new Date(Date.now() + h * 60 * 60 * 1000);
+    // Sessions are hour-aligned one-hour blocks inside the 08:00-18:00 UTC working
+    // window everywhere else in the product, and the booking validator now rejects
+    // anything else - so the demo data has to look the same. A raw `now + h` gave
+    // times like `06:34:18.029`, which the counselor dashboard renders verbatim
+    // ("Sun, 30 Aug 2026 08:34:18 GMT") and which sit outside the counselor's own
+    // availability. Snap down to the hour, then move forward into the window if
+    // needed - forward only, so the confirmed session deliberately placed beyond
+    // the reminder service's 24 h band stays beyond it, and past sessions stay past.
+    const hoursFromNow = (h: number) => {
+      const d = new Date(Date.now() + h * 60 * 60 * 1000);
+      d.setUTCMinutes(0, 0, 0);
+      const hour = d.getUTCHours();
+      if (hour < 8) {
+        d.setUTCHours(8);
+      } else if (hour > 17) {
+        d.setUTCDate(d.getUTCDate() + 1);
+        d.setUTCHours(8);
+      }
+      return d;
+    };
     const jitsi = (n: number) => `https://meet.jit.si/wellmindly-counseling-${DEMO(n)}`;
 
     // Six sessions covering the statuses the portals actually branch on: two
