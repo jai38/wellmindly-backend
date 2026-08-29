@@ -167,7 +167,10 @@ router.get(
   async (_req: Request, res: Response) => {
     try {
       const students = await prisma.user.findMany({
-        where: { role: 'STUDENT' },
+        // The v1 analytics endpoint counts students with `deletedAt: null`, so
+        // without the same filter here the admin list is longer than the
+        // headline figure sitting above it.
+        where: { role: 'STUDENT', deletedAt: null },
         select: {
           id: true,
           email: true,
@@ -203,7 +206,7 @@ router.get(
     try {
       const studentId = req.params.id as string;
       const student = await prisma.user.findFirst({
-        where: { id: studentId, role: 'STUDENT' },
+        where: { id: studentId, role: 'STUDENT', deletedAt: null },
         include: {
           university: {
             select: {

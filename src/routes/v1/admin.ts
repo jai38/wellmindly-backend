@@ -4,6 +4,7 @@ import prisma from '../../lib/prisma';
 import { authenticateJWT, requireRoles, AuthenticatedRequest } from '../../middleware/rbac';
 import { sendSuccess, sendError } from '../../utils/response';
 import { sendEmail } from '../../utils/mailer';
+import { queueEmail } from '../../utils/emailQueue';
 import { logAuditEvent } from '../../utils/auditLogger';
 import { escapeHtml } from '../../utils/escapeHtml';
 
@@ -143,8 +144,25 @@ router.put('/counselors/:id/status', async (req: AuthenticatedRequest, res: Resp
   const id = String(req.params.id);
   const { status } = req.body as { status?: string };
 
-  if (!status) {
-    sendError(res, 'INVALID_INPUT', 'Status is required', 400);
+  // Without this the value goes to Prisma as `any`, an unknown status comes back
+  // as a 500, and the admin UI shows "something went wrong" for what is really a
+  // bad request.
+  const allowedStatuses = [
+    'INVITED',
+    'PROFILE_PENDING',
+    'UNDER_REVIEW',
+    'ACTIVE',
+    'SUSPENDED',
+    'INACTIVE',
+  ] as const;
+
+  if (!status || !allowedStatuses.includes(status as (typeof allowedStatuses)[number])) {
+    sendError(
+      res,
+      'INVALID_INPUT',
+      `Status must be one of: ${allowedStatuses.join(', ')}`,
+      400
+    );
     return;
   }
 
@@ -227,9 +245,42 @@ router.put('/sessions/:id/cancel', async (req: AuthenticatedRequest, res: Respon
       cancellationReason: reason || 'Cancelled by Administrator from Master Calendar',
     },
     include: {
-      counselor: { include: { user: { select: { firstName: true, lastName: true } } } },
+      counselor: { include: { user: { select: { firstName: true, lastName: true, email: true } } } },
       student: { select: { firstName: true, lastName: true, email: true } },
     },
+  });
+
+  // Both sides have this hour in their calendar and neither is looking at the
+  // admin panel. Without a notification the student joins an empty Jitsi room and
+  // the counselor waits for someone who is never coming.
+  const when = updated.startTime.toUTCString();
+  const cancelReason = reason || 'Cancelled by a WellMindly administrator';
+
+  queueEmail({
+    to: updated.student.email,
+    subject: 'Your WellMindly counseling session has been cancelled',
+    html: `
+      <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px;">
+        <h2 style="color: #4f46e5; margin-top: 0;">Session Cancelled</h2>
+        <p>Hello <strong>${escapeHtml(updated.student.firstName)}</strong>,</p>
+        <p>Your session with ${escapeHtml(updated.counselor.user.firstName)} ${escapeHtml(updated.counselor.user.lastName)} on <strong>${when}</strong> has been cancelled.</p>
+        <p style="margin: 4px 0;"><strong>Reason:</strong> ${escapeHtml(cancelReason)}</p>
+        <p>You can book a new time from your dashboard whenever you are ready.</p>
+      </div>
+    `,
+  });
+
+  queueEmail({
+    to: updated.counselor.user.email,
+    subject: 'A session on your WellMindly calendar has been cancelled',
+    html: `
+      <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px;">
+        <h2 style="color: #4f46e5; margin-top: 0;">Session Cancelled</h2>
+        <p>Hello <strong>${escapeHtml(updated.counselor.user.firstName)}</strong>,</p>
+        <p>Your session with ${escapeHtml(updated.student.firstName)} ${escapeHtml(updated.student.lastName)} on <strong>${when}</strong> has been cancelled by an administrator.</p>
+        <p style="margin: 4px 0;"><strong>Reason:</strong> ${escapeHtml(cancelReason)}</p>
+      </div>
+    `,
   });
 
   logAuditEvent({
@@ -251,7 +302,10 @@ router.delete('/sessions/:id', async (req: AuthenticatedRequest, res: Response) 
   const id = String(req.params.id);
 
   const session = await prisma.counselorSession.findUnique({ where: { id } });
-  if (!session) {
+  // The cancel route above already treats a soft-deleted row as gone. Without the
+  // same check here a second delete answers 200 and rewrites `deletedAt`, so the
+  // admin UI reports success for a row it can no longer show.
+  if (!session || session.deletedAt) {
     sendError(res, 'NOT_FOUND', 'Session not found', 404);
     return;
   }
@@ -294,19 +348,47 @@ router.put('/sessions/:id/reschedule', async (req: AuthenticatedRequest, res: Re
     return;
   }
 
+  // A cancelled or finished session is not a candidate for a new time. The update
+  // below writes `status: 'CONFIRMED'` unconditionally, so without this guard
+  // rescheduling a session the student had already cancelled silently put it back
+  // on their calendar as confirmed, and a COMPLETED session could be moved into
+  // the future and reopened.
+  const reschedulableStatuses = ['PENDING', 'CONFIRMED'];
+  if (!reschedulableStatuses.includes(existingSession.status)) {
+    sendError(
+      res,
+      'INVALID_STATE',
+      `A session with status ${existingSession.status} cannot be rescheduled`,
+      409
+    );
+    return;
+  }
+
   const targetCounselorId = counselorId || existingSession.counselorId;
   const newStart = new Date(startTime);
   const newEnd = new Date(endTime);
 
-  // Check for conflicting active bookings for target counselor
+  // Same interval check the booking path now applies. A reversed or zero-length
+  // window stored here can never be matched by the overlap query again, so it
+  // becomes invisible to every later booking and reschedule.
+  if (Number.isNaN(newStart.getTime()) || Number.isNaN(newEnd.getTime()) || newEnd <= newStart) {
+    sendError(res, 'INVALID_TIME_RANGE', 'The new start and end times are not a valid window', 400);
+    return;
+  }
+
+  // Check for conflicting active bookings for target counselor.
+  // Strict comparisons: with lte/gte a session ending exactly when another starts
+  // counted as a conflict, so moving a session into the free hour immediately
+  // before or after an existing one was refused. Sessions are back-to-back hours
+  // by design.
   const conflict = await prisma.counselorSession.findFirst({
     where: {
       id: { not: id },
       counselorId: targetCounselorId,
       status: { notIn: ['CANCELLED_BY_STUDENT', 'CANCELLED_BY_COUNSELOR', 'EXPIRED'] },
       deletedAt: null,
-      startTime: { lte: newEnd },
-      endTime: { gte: newStart },
+      startTime: { lt: newEnd },
+      endTime: { gt: newStart },
     },
   });
 
@@ -324,9 +406,40 @@ router.put('/sessions/:id/reschedule', async (req: AuthenticatedRequest, res: Re
       status: 'CONFIRMED',
     },
     include: {
-      counselor: { include: { user: { select: { firstName: true, lastName: true } } } },
+      counselor: { include: { user: { select: { firstName: true, lastName: true, email: true } } } },
       student: { select: { firstName: true, lastName: true, email: true } },
     },
+  });
+
+  // Same reasoning as the cancel route: the old hour is gone from the calendar and
+  // nobody outside the admin panel knows the session moved.
+  queueEmail({
+    to: updated.student.email,
+    subject: 'Your WellMindly counseling session has been rescheduled',
+    html: `
+      <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px;">
+        <h2 style="color: #4f46e5; margin-top: 0;">New Session Time</h2>
+        <p>Hello <strong>${escapeHtml(updated.student.firstName)}</strong>,</p>
+        <p>Your session with ${escapeHtml(updated.counselor.user.firstName)} ${escapeHtml(updated.counselor.user.lastName)} has been moved.</p>
+        <p style="margin: 4px 0;"><strong>Previous time:</strong> ${existingSession.startTime.toUTCString()}</p>
+        <p style="margin: 4px 0;"><strong>New time:</strong> ${newStart.toUTCString()}</p>
+        ${updated.meetingLink ? `<p style="margin: 16px 0;"><a href="${updated.meetingLink}" style="background-color: #4f46e5; color: white; padding: 12px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">Join Session</a></p>` : ''}
+      </div>
+    `,
+  });
+
+  queueEmail({
+    to: updated.counselor.user.email,
+    subject: 'A session on your WellMindly calendar has been rescheduled',
+    html: `
+      <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px;">
+        <h2 style="color: #4f46e5; margin-top: 0;">New Session Time</h2>
+        <p>Hello <strong>${escapeHtml(updated.counselor.user.firstName)}</strong>,</p>
+        <p>Your session with ${escapeHtml(updated.student.firstName)} ${escapeHtml(updated.student.lastName)} has been moved by an administrator.</p>
+        <p style="margin: 4px 0;"><strong>Previous time:</strong> ${existingSession.startTime.toUTCString()}</p>
+        <p style="margin: 4px 0;"><strong>New time:</strong> ${newStart.toUTCString()}</p>
+      </div>
+    `,
   });
 
   logAuditEvent({
@@ -377,7 +490,9 @@ router.get('/analytics', async (req: AuthenticatedRequest, res: Response) => {
     prisma.user.count({ where: { role: 'STUDENT', deletedAt: null } }),
     prisma.counselorSession.count({ where: { deletedAt: null } }),
     prisma.counselorSession.count({ where: { status: 'COMPLETED', deletedAt: null } }),
-    prisma.studentFeedback.aggregate({ _avg: { rating: true } }),
+    // Every other figure on this card excludes soft-deleted rows; the average
+    // has to as well, or it moves when a session is removed and nothing else does.
+    prisma.studentFeedback.aggregate({ _avg: { rating: true }, where: { deletedAt: null } }),
   ]);
 
   sendSuccess(res, {

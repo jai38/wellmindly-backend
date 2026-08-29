@@ -89,6 +89,17 @@ app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', message: 'API is healthy' });
 });
 
+// Unmatched routes. Express's default answer is an HTML page, so a client that
+// calls a path this build does not have gets `<!DOCTYPE ...` where it expected
+// JSON and throws inside res.json() rather than reading the status. Only /api is
+// claimed here; anything else is left to Express.
+app.use('/api', (req: express.Request, res: express.Response) => {
+  res.status(404).json({
+    success: false,
+    error: { code: 'NOT_FOUND', message: `No such endpoint: ${req.method} ${req.baseUrl}${req.path}` },
+  });
+});
+
 // Last-resort error handler. Express's own handler answers with an HTML page
 // containing the stack trace and absolute file paths, which is not something a
 // client should ever be shown; anything that escapes a route lands here instead
