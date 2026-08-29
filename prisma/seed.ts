@@ -783,7 +783,272 @@ async function main() {
     }
     console.log(`✅ Sessions: ${sessions.length} across COMPLETED / CONFIRMED / PENDING / CANCELLED / NO_SHOW`);
 
-    // DEMO_ACTIVITY_PLACEHOLDER
+    // Session notes: one finished note per completed session, one draft, and a
+    // short note on the no-show so the notes list is not uniform.
+    const notes = [
+      {
+        n: 11, sessionId: DEMO(1), counselorId: vinayak.id, studentId: alice.id, isDraft: false,
+        title: 'First session — settling in',
+        content: 'Discussed exam-period sleep disruption and the workload pattern behind it. Agreed on a wind-down routine and a check-in next week. Student engaged well and set her own goal.',
+      },
+      {
+        n: 12, sessionId: DEMO(1), counselorId: vinayak.id, studentId: alice.id, isDraft: true,
+        title: 'Follow-up plan (draft)',
+        content: 'Draft: revisit the sleep log, and introduce a short grounding exercise if the workload spike continues into next month.',
+      },
+      {
+        n: 13, sessionId: DEMO(2), counselorId: vinayak.id, studentId: bob.id, isDraft: false,
+        title: 'Social anxiety around group work',
+        content: 'Explored avoidance of group presentations. Introduced a graded exposure plan starting with small-group contributions. Student agreed to try one contribution before the next session.',
+      },
+      {
+        n: 14, sessionId: DEMO(6), counselorId: vinayak.id, studentId: carol.id, isDraft: false,
+        title: 'No-show — followed up',
+        content: 'Student did not join. Sent a follow-up offering a rebooking; no concern flagged.',
+      },
+    ];
+    for (const note of notes) {
+      await prisma.sessionNote.upsert({
+        where: { id: DEMO(note.n) },
+        update: { title: note.title, content: note.content, isDraft: note.isDraft },
+        create: {
+          id: DEMO(note.n),
+          sessionId: note.sessionId,
+          counselorId: note.counselorId,
+          studentId: note.studentId,
+          title: note.title,
+          content: note.content,
+          isPrivate: true,
+          isDraft: note.isDraft,
+        },
+      });
+    }
+    console.log(`✅ Session notes: ${notes.length} (one draft included)`);
+
+    // Both feedback sides on session 1, student-only on session 2. The gap is
+    // deliberate: the admin dual-feedback tab has an "awaiting the other side"
+    // state that never appears if every session is fully rated.
+    await prisma.studentFeedback.upsert({
+      where: { sessionId: DEMO(1) },
+      update: { rating: 5 },
+      create: {
+        sessionId: DEMO(1), counselorId: vinayak.id, studentId: alice.id, rating: 5,
+        comments: 'Felt genuinely listened to. The wind-down routine has already helped.',
+        answers: { heard: 5, wouldReturn: 5, helpfulness: 5 },
+      },
+    });
+    await prisma.counselorFeedback.upsert({
+      where: { sessionId: DEMO(1) },
+      update: { rating: 4 },
+      create: {
+        sessionId: DEMO(1), counselorId: vinayak.id, studentId: alice.id, rating: 4,
+        summaryNote: 'Productive first session. Student is motivated and set her own goal; no risk indicators.',
+        answers: { engagement: 5, riskFlag: false, followUpNeeded: true },
+      },
+    });
+    await prisma.studentFeedback.upsert({
+      where: { sessionId: DEMO(2) },
+      update: { rating: 4 },
+      create: {
+        sessionId: DEMO(2), counselorId: vinayak.id, studentId: bob.id, rating: 4,
+        comments: 'Useful, though I would like more practical steps next time.',
+        answers: { heard: 4, wouldReturn: 4, helpfulness: 4 },
+      },
+    });
+    console.log('✅ Feedback: 2 student, 1 counselor (session 2 deliberately awaits the counselor side)');
+
+    // A week of check-ins for Alice and a shorter run for Bob, so the dashboard
+    // mood trend and the admin wellbeing KPIs have a real series to draw.
+    // DailyCheckin has no natural unique key, so seeded rows are replaced
+    // wholesale rather than appended to on a re-run.
+    for (const [student, days] of [[alice, 14] as const, [bob, 6] as const]) {
+      await prisma.dailyCheckin.deleteMany({ where: { userId: student.id } });
+      for (let dayAgo = days; dayAgo >= 0; dayAgo--) {
+        const createdAt = new Date();
+        createdAt.setDate(createdAt.getDate() - dayAgo);
+        createdAt.setHours(9, randomInt(0, 45), 0, 0);
+        await prisma.dailyCheckin.create({
+          data: { userId: student.id, rating: randomInt(2, 5), createdAt },
+        });
+      }
+    }
+    console.log('✅ Daily check-ins: 15 days for Alice, 7 for Bob');
+
+    // TalkMindly content. Bob and Carol get talk profiles so their posts carry a
+    // stable nickname; Alice deliberately keeps none, so the anonymous-profile
+    // onboarding step can still be walked through on the main demo account.
+    await prisma.user.update({
+      where: { id: bob.id },
+      data: { talkNickname: 'QuietOwl42', talkAvatar: 'owl', talkTermsAccepted: true },
+    });
+    await prisma.user.update({
+      where: { id: carol.id },
+      data: { talkNickname: 'SteadyFox17', talkAvatar: 'fox', talkTermsAccepted: true },
+    });
+
+    const roomByName = async (name: string) => prisma.talkRoom.findUnique({ where: { name } });
+    const [academic, social, stress, general] = await Promise.all([
+      roomByName('Academic Pressure'),
+      roomByName('Social & Loneliness'),
+      roomByName('Stress & Overwhelm'),
+      roomByName('General Reflection'),
+    ]);
+
+    const talkNotes = [
+      { n: 21, room: academic, author: bob, nickname: 'QuietOwl42', avatar: 'owl', status: 'APPROVED' as const, meToo: 12, content: 'Three deadlines in one week and I keep opening my laptop and just staring at it. Anyone else freeze like this?' },
+      { n: 22, room: academic, author: carol, nickname: 'SteadyFox17', avatar: 'fox', status: 'APPROVED' as const, meToo: 5, content: 'What actually helped me was writing the smallest possible next step on a sticky note. Not the whole essay. Just the next sentence.' },
+      { n: 23, room: social, author: carol, nickname: 'SteadyFox17', avatar: 'fox', status: 'APPROVED' as const, meToo: 21, content: 'Second year and I still eat lunch alone most days. It is not dramatic, it is just quiet in a way I did not expect.' },
+      { n: 24, room: stress, author: bob, nickname: 'QuietOwl42', avatar: 'owl', status: 'APPROVED' as const, meToo: 8, content: 'Chest tight all week. Booked a session with a coach here, which felt like a bigger step than it sounds.' },
+      { n: 25, room: general, author: carol, nickname: 'SteadyFox17', avatar: 'fox', status: 'APPROVED' as const, meToo: 3, content: 'Small win: I went to bed before 1am four nights in a row. Logging it here so it counts.' },
+      { n: 26, room: stress, author: bob, nickname: 'QuietOwl42', avatar: 'owl', status: 'FLAGGED' as const, meToo: 0, reported: true, content: 'This one is seeded as reported and flagged so the moderation queue has something real to act on.' },
+    ];
+
+    for (const note of talkNotes) {
+      if (!note.room) continue;
+      await prisma.talkNote.upsert({
+        where: { id: DEMO(note.n) },
+        update: { content: note.content, status: note.status, meTooCount: note.meToo, isReported: note.reported ?? false },
+        create: {
+          id: DEMO(note.n), roomId: note.room.id, userId: note.author.id,
+          nickname: note.nickname, avatar: note.avatar, content: note.content,
+          status: note.status, meTooCount: note.meToo, isReported: note.reported ?? false,
+          moderationReason: note.status === 'FLAGGED' ? 'Reported by a student; awaiting admin review.' : null,
+        },
+      });
+    }
+    console.log(`✅ TalkMindly notes: ${talkNotes.length} (one FLAGGED and reported)`);
+
+    // Replies, reactions and the report behind the flagged note.
+    const replies = [
+      { n: 31, noteId: DEMO(21), author: carol, nickname: 'SteadyFox17', avatar: 'fox', content: 'Freezing is so common. It is not laziness, it is the load being too big to hold at once.' },
+      { n: 32, noteId: DEMO(21), author: bob, nickname: 'QuietOwl42', avatar: 'owl', content: 'Thank you. Reading that helped more than I expected.' },
+      { n: 33, noteId: DEMO(23), author: bob, nickname: 'QuietOwl42', avatar: 'owl', content: 'Quiet is the right word for it. You are not the only one in that lunch hall.' },
+    ];
+    for (const r of replies) {
+      await prisma.talkReply.upsert({
+        where: { id: DEMO(r.n) },
+        update: { content: r.content },
+        create: {
+          id: DEMO(r.n), noteId: r.noteId, userId: r.author.id,
+          nickname: r.nickname, avatar: r.avatar, content: r.content,
+        },
+      });
+    }
+
+    const reactions = [
+      { noteId: DEMO(21), userId: carol.id, type: 'SUPPORT' as const },
+      { noteId: DEMO(21), userId: alice.id, type: 'METOO' as const },
+      { noteId: DEMO(23), userId: alice.id, type: 'HUG' as const },
+      { noteId: DEMO(23), userId: bob.id, type: 'SUPPORT' as const },
+      { noteId: DEMO(25), userId: alice.id, type: 'SUPPORT' as const },
+    ];
+    for (const re of reactions) {
+      await prisma.talkReaction.upsert({
+        where: { noteId_userId_type: { noteId: re.noteId, userId: re.userId, type: re.type } },
+        update: {},
+        create: re,
+      });
+    }
+
+    await prisma.talkReport.upsert({
+      where: { id: DEMO(41) },
+      update: {},
+      create: {
+        id: DEMO(41), noteId: DEMO(26), userId: carol.id,
+        reason: 'Not appropriate for this room.',
+      },
+    });
+    console.log(`✅ TalkMindly: ${replies.length} replies, ${reactions.length} reactions, 1 report`);
+
+    // Contact requests, notifications and audit logs — the three admin tabs that
+    // otherwise open on an empty table.
+    const contacts = [
+      { n: 51, name: 'Priya Menon', email: 'priya.menon@example.edu', subject: 'Campus partnership', message: 'We run wellbeing services for 4,000 students and would like to understand how WellMindly reporting works.' },
+      { n: 52, name: 'Rahul Iyer', email: 'rahul.iyer@example.com', subject: 'Counselor application', message: 'I am a licensed counselor with six years of student-facing experience and would like to join the panel.' },
+    ];
+    for (const c of contacts) {
+      await prisma.contactRequest.upsert({
+        where: { id: DEMO(c.n) },
+        update: { message: c.message },
+        create: { id: DEMO(c.n), name: c.name, email: c.email, subject: c.subject, message: c.message },
+      });
+    }
+
+    const notifications = [
+      { n: 61, userId: alice.id, type: 'SESSION_CONFIRMED', title: 'Session confirmed', message: 'Your session with Vinayak Katyayan is confirmed. You will get a reminder before it starts.', read: false },
+      { n: 62, userId: alice.id, type: 'FEEDBACK_REQUEST', title: 'How was your session?', message: 'Your feedback stays private and helps us match students better.', read: true },
+      { n: 63, userId: bob.id, type: 'SESSION_CANCELLED', title: 'Session cancelled', message: 'Your session with Kriti Sapra was cancelled. You can rebook any time.', read: false },
+    ];
+    for (const nt of notifications) {
+      await prisma.notification.upsert({
+        where: { id: DEMO(nt.n) },
+        update: { read: nt.read },
+        create: { id: DEMO(nt.n), userId: nt.userId, type: nt.type, title: nt.title, message: nt.message, read: nt.read },
+      });
+    }
+
+    const auditLogs = [
+      { n: 71, action: 'COUNSELOR_APPROVED', targetEntity: 'CounselorProfile', targetId: vinayak.id, details: { from: 'UNDER_REVIEW', to: 'ACTIVE' } },
+      { n: 72, action: 'TALK_NOTE_FLAGGED', targetEntity: 'TalkNote', targetId: DEMO(26), details: { reason: 'Reported by a student' } },
+      { n: 73, action: 'SESSION_CANCELLED', targetEntity: 'CounselorSession', targetId: DEMO(5), details: { by: 'STUDENT' } },
+    ];
+    for (const log of auditLogs) {
+      await prisma.auditLog.upsert({
+        where: { id: DEMO(log.n) },
+        update: {},
+        create: {
+          id: DEMO(log.n), actorId: adminUser.id, action: log.action,
+          targetEntity: log.targetEntity, targetId: log.targetId,
+          ipAddress: '127.0.0.1', details: log.details,
+        },
+      });
+    }
+    console.log(`✅ Admin data: ${contacts.length} contact requests, ${notifications.length} notifications, ${auditLogs.length} audit logs`);
+
+    // An open invitation and a counselor waiting on review, so the onboarding
+    // chain (invite → profile → approve) can be demonstrated end to end without
+    // touching one of the nine live counselor accounts.
+    const inviteExpiry = new Date();
+    inviteExpiry.setDate(inviteExpiry.getDate() + 7);
+    await prisma.counselorInvitation.upsert({
+      where: { email: 'newcoach@wellmindly.com' },
+      update: { expiresAt: inviteExpiry, used: false },
+      create: {
+        email: 'newcoach@wellmindly.com',
+        firstName: 'Nikhil',
+        lastName: 'Rao',
+        token: 'demo-invitation-token-newcoach',
+        expiresAt: inviteExpiry,
+        used: false,
+      },
+    });
+
+    const pendingEmail = 'pendingcoach@wellmindly.com';
+    let pendingUser = await prisma.user.findUnique({ where: { email: pendingEmail } });
+    if (!pendingUser) {
+      pendingUser = await prisma.user.create({
+        data: {
+          email: pendingEmail,
+          passwordHash: await bcrypt.hash('Wellmindly@123', SALT_ROUNDS),
+          firstName: 'Neha',
+          lastName: 'Verma',
+          role: 'COUNSELOR',
+          timezone: 'UTC',
+        },
+      });
+    }
+    await prisma.counselorProfile.upsert({
+      where: { userId: pendingUser.id },
+      update: { status: 'UNDER_REVIEW' },
+      create: {
+        userId: pendingUser.id,
+        credentials: 'M.A. Counselling Psychology (submitted for verification)',
+        specializations: ['Anxiety', 'Academic Stress'],
+        bio: 'Submitted a profile for review and is waiting on admin approval.',
+        status: 'UNDER_REVIEW',
+      },
+    });
+    console.log('✅ Onboarding chain: 1 open invitation, 1 counselor UNDER_REVIEW');
   }
 
   console.log('\n🎉 Seeding complete!');

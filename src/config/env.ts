@@ -20,6 +20,10 @@ const envSchema = z.object({
   GEMINI_MODEL: z.string().optional().default('gemini-3.5-flash'),
   ALLOWED_ORIGINS: z.string().optional().default('http://localhost:5173,http://localhost:5174,http://localhost:5175,https://wellmindly.com,https://admin.wellmindly.com,https://counselor.wellmindly.com,https://university.wellmindly.com,https://www.wellmindly.com,http://localhost,capacitor://localhost'),
   CHAT_SESSION_MAX_REQUESTS: z.coerce.number().default(100),
+  // Requests per IP per 15 minutes against /api. Configurable only so a local
+  // sanity sweep can hammer every route in one pass; deployed hosts should not
+  // set it and keep the 100 default.
+  RATE_LIMIT_MAX: z.coerce.number().default(100),
   // Set to 'false' on a developer machine so a local boot never mails real
   // students and counselors. Absent means on, so deployed behaviour is unchanged.
   ENABLE_REMINDER_SCHEDULER: z
