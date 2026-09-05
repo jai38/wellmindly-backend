@@ -142,12 +142,22 @@ router.get(
         by: ['userId'],
       });
 
+      // 6. Daily check-in mood, for the "Avg Daily Mood" tile on the admin overview.
+      // The tile previously hardcoded a value because nothing here exposed one.
+      // _avg is null when there are no rows, so the client must handle null.
+      const mood = await prisma.dailyCheckin.aggregate({
+        _avg: { rating: true },
+        _count: { id: true },
+      });
+
       res.status(200).json({
         totalSubmissions,
         totalUniqueUsers: uniqueUsers.length,
         classificationMetrics,
         quizMetrics,
         submissionTrend,
+        avgDailyMood: mood._avg.rating,
+        totalCheckins: mood._count.id,
       });
     } catch (error) {
       console.error('Error fetching admin metrics:', error);
