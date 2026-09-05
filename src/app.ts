@@ -58,7 +58,7 @@ const generalLimiter = rateLimit({
 
 const strictAuthLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 5,
+  max: env.AUTH_RATE_LIMIT_MAX,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many authentication attempts, please try again after a minute' },
