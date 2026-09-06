@@ -136,7 +136,7 @@
     "country": "United States"
   },
   {
-    "name": "1-800-273-8255, followed by Pressing 1",
+    "name": "Veterans Crisis Line (1-800-273-8255, Press 1)",
     "description": "The Veterans Crisis Line can be reached at 1-800-273-8255, followed by Pressing 1.",
     "phone": "1-800-273-8255",
     "website": "",
@@ -152,8 +152,8 @@
     "country": "United States"
   },
   {
-    "name": "IMAlive Crisis Chatine",
-    "description": "IMAlive Crisis Chatine (www.imalive.org) is a non-profit, worldwide 24/7, anonymous chatline to help anyone in crisis via instant messaging.",
+    "name": "IMAlive Crisis Chatline",
+    "description": "IMAlive Crisis Chatline (www.imalive.org) is a non-profit, worldwide 24/7, anonymous chatline to help anyone in crisis via instant messaging.",
     "phone": "Online Support",
     "website": "https://www.imalive.org/",
     "category": "Crisis & Suicide Support",
@@ -192,7 +192,7 @@
     "country": "United States"
   },
   {
-    "name": "https://www.thetrevorproject.org/get-help-now/",
+    "name": "TrevorChat",
     "description": "TrevorChat can be found at https://www.thetrevorproject.org/get-help-now/",
     "phone": "Online Support",
     "website": "https://www.thetrevorproject.org/get-help-now/",
@@ -208,9 +208,9 @@
     "country": "United States"
   },
   {
-    "name": "Trans Lifeline",
+    "name": "Trans Lifeline (1-877-565-8860)",
     "description": "The Trans Lifeline can be reached at 1-877-565-8860.",
-    "phone": "18775658860",
+    "phone": "1-877-565-8860",
     "website": "",
     "category": "LGBTQ+ Support",
     "country": "United States"
@@ -288,7 +288,7 @@
     "country": "Belgium"
   },
   {
-    "name": "https://www.zelfmoord1813.be/chat-met-zelfmoordlijn-1813",
+    "name": "Zelfmoordlijn 1813 (webchat)",
     "description": "Zelfmoordlijn 1813 limited webchat can be found at https://www.zelfmoord1813.be/chat-met-zelfmoordlijn-1813.",
     "phone": "Online Support",
     "website": "https://www.zelfmoord1813.be/chat-met-zelfmoordlijn-1813",
@@ -304,7 +304,7 @@
     "country": "Belgium"
   },
   {
-    "name": "https://www.preventionsuicide.be/fr/j-ai-besoin-d-aide.html",
+    "name": "Center for the Prevention of Suicide (website & forum)",
     "description": "The Center for the Prevention of Suicide website and Forum can be found at https://www.preventionsuicide.be/fr/j-ai-besoin-d-aide.html.",
     "phone": "Online Support",
     "website": "https://www.preventionsuicide.be/fr/j-ai-besoin-d-aide.html",
@@ -354,7 +354,7 @@
   {
     "name": "Canada Suicide Prevention Service",
     "description": "Canada Suicide Prevention Service can be reached at 1-833-456-4566 or 45645 (Text, 4 p.m. to midnight ET only) (http://www.crisisservicescanada.ca/) nationwide suicide prevention and support network.",
-    "phone": "18334564566",
+    "phone": "1-833-456-4566",
     "website": "http://www.crisisservicescanada.ca/",
     "category": "Crisis & Suicide Support",
     "country": "Canada"
@@ -370,7 +370,7 @@
   {
     "name": "Trans Lifeline",
     "description": "Trans Lifeline (http://www.translifeline.org/) is a toll-free crisis hotline available in the United States and in Canada for transgender people staffed by transgender people. It can be reached at 1-877-330-6366.",
-    "phone": "18773306366",
+    "phone": "1-877-330-6366",
     "website": "http://www.translifeline.org/",
     "category": "LGBTQ+ Support",
     "country": "Canada"
@@ -1024,7 +1024,7 @@
     "country": "Netherlands"
   },
   {
-    "name": "https://www.113.nl/ik-denk-aan-zelfmoord/hulplijn",
+    "name": "113Online (webchat)",
     "description": "113Online Webchat can be found at https://www.113.nl/ik-denk-aan-zelfmoord/hulplijn.",
     "phone": "Online Support",
     "website": "https://www.113.nl/ik-denk-aan-zelfmoord/crisislijn",
